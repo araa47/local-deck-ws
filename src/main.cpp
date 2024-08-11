@@ -256,7 +256,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                             const char* entity_id = change.key().c_str();
                             JsonObject state = change.value();
                             if (strcmp(entity_id, "sensor.time") == 0) {
-                                updateTimeAndCheckNightMode(state["s"]);
+                                if (state.containsKey("+") && state["+"].containsKey("s")) {
+                                    const char* time_str = state["+"]["s"];
+                                    updateTimeAndCheckNightMode(time_str);
+                                } else {
+                                    Serial.println("Time state doesn't contain expected structure");
+                                }
                             } else {
                                 Serial.printf("Entity: %s, Changes: ", entity_id);
                                 serializeJson(state, Serial);
@@ -494,17 +499,34 @@ void showWebSocketConnectionFailedAnimation() {
 }
 
 void updateTimeAndCheckNightMode(const char* time_str) {
-    int hour, minute;
-    sscanf(time_str, "%d:%d", &hour, &minute);
-    
+    Serial.printf("Received time update: %s\n", time_str);
+
+    if (!time_str || strlen(time_str) < 5) {
+        Serial.println("Invalid time string received");
+        return;
+    }
+
+    int hour = 0, minute = 0;
+    if (sscanf(time_str, "%d:%d", &hour, &minute) != 2) {
+        Serial.printf("Failed to parse time string: %s\n", time_str);
+        return;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        Serial.printf("Invalid time values: %02d:%02d\n", hour, minute);
+        return;
+    }
+
     bool newIsNightMode = (hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR);
     
     if (newIsNightMode != isNightMode) {
         isNightMode = newIsNightMode;
-        Serial.printf("Night mode changed to: %s\n", isNightMode ? "ON" : "OFF");
+        Serial.printf("Night mode changed to: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
         // Update all LEDs with new brightness
         for (int i = 0; i < NUM_MAPPINGS; i++) {
             updateLED(entityMappings[i].entity_id, JsonObject());
         }
+    } else {
+        Serial.printf("Night mode unchanged: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
     }
 }
