@@ -70,6 +70,7 @@ After flashing the firmware and powering on the LocalDeck, it will attempt to co
 - If the device shows a connection failure, check your Wi-Fi credentials and Home Assistant configuration in `secrets.h`.
 - Ensure your Home Assistant instance is reachable from the network the LocalDeck is connected to.
 - Verify that the long-lived access token is valid and has the necessary permissions in Home Assistant.
+- You will need sensor.time to be enabled in Home Assistant and set to the correct timezone for nightmode to work correctly
 
 ## Contributing
 

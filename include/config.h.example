@@ -12,6 +12,10 @@
 #define DEBOUNCE_TIME 50 // milliseconds
 #define LONG_PRESS_TIME 1000 // milliseconds
 
+// Night mode configuration
+#define NIGHT_START_HOUR 22  // 10 PM
+#define NIGHT_END_HOUR 8     // 8 AM
+#define NIGHT_BRIGHTNESS_SCALE 0.1f
 
 
 // Special Up button for brightness control (coordinates 2,0)

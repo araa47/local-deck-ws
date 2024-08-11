@@ -8,15 +8,12 @@
 #include "secrets.h" 
 #include "config.h"
 
-
-
 const size_t JSON_BUFFER_SIZE = 16384; // 16KB
-struct EntityState {
+struct EntityState {       
     bool is_on;
     uint8_t r, g, b;
     uint8_t brightness;
 };
-
 
 const int rowPins[ROWS] = {21, 20, 3, 7};
 const int colPins[COLS] = {0, 1, 10, 4, 5, 6};
@@ -36,6 +33,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 void toggleEntity(const char* entity_id);
 void buttonCheckTask(void * parameter);
 void adjustBrightness(int x, int y, bool increase);
+void updateTimeAndCheckNightMode(const char* time_str);
 
 // Add these global variables
 unsigned long lastDebounceTime[ROWS][COLS] = {{0}};
@@ -52,6 +50,10 @@ void showWiFiConnectedAnimation();
 void showWebSocketConnectedAnimation();
 void showConnectionFailedAnimation();
 void showWebSocketConnectionFailedAnimation();
+
+// Night mode variables
+bool isNightMode = false;
+int currentHour = -1;
 
 void setup() {
     Serial.begin(115200);
@@ -153,18 +155,30 @@ void updateLED(const char* entity_id, JsonObject state) {
         currentState.r = currentState.g = currentState.b = currentState.brightness = 0;
     }
 
+    // Apply night mode scaling
+    float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
+    
+    // Debug print for scale factor
+    Serial.printf("Scale factor: %.2f (isNightMode: %s)\n", scaleFactor, isNightMode ? "true" : "false");
+
     uint32_t color = strip.Color(
-        map(currentState.r, 0, 255, 0, currentState.brightness),
-        map(currentState.g, 0, 255, 0, currentState.brightness),
-        map(currentState.b, 0, 255, 0, currentState.brightness)
+        map(currentState.r, 0, 255, 0, currentState.brightness * scaleFactor),
+        map(currentState.g, 0, 255, 0, currentState.brightness * scaleFactor),
+        map(currentState.b, 0, 255, 0, currentState.brightness * scaleFactor)
     );
 
     int ledIndex = getLedIndex(mapping->x, mapping->y);
     strip.setPixelColor(ledIndex, color);
     strip.show();
 
-    Serial.printf("Updated LED for %s: R=%d, G=%d, B=%d, Brightness=%d\n",
-                  entity_id, currentState.r, currentState.g, currentState.b, currentState.brightness);
+    // Debug print for LED values
+    uint32_t c = strip.getPixelColor(ledIndex);
+    uint8_t r = (uint8_t)(c >> 16);
+    uint8_t g = (uint8_t)(c >> 8);
+    uint8_t b = (uint8_t)c;
+    Serial.printf("Updated LED for %s: R=%d, G=%d, B=%d, Brightness=%d, Scaled Brightness=%d, Actual R=%d, G=%d, B=%d\n",
+                  entity_id, currentState.r, currentState.g, currentState.b, currentState.brightness,
+                  (int)(currentState.brightness * scaleFactor), r, g, b);
 }
 
 void initializeEntityStates() {
@@ -182,6 +196,9 @@ void subscribeToEntities() {
     for (int i = 0; i < NUM_MAPPINGS; i++) {
         entity_ids.add(entityMappings[i].entity_id);
     }
+    
+    // Add the time entity
+    entity_ids.add("sensor.time");
     
     String message;
     serializeJson(doc, message);
@@ -222,10 +239,15 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                         Serial.println("Full state update:");
                         JsonObject entities = event["a"];
                         for (JsonPair entity : entities) {
-                            Serial.printf("Entity: %s, State: ", entity.key().c_str());
-                            serializeJson(entity.value(), Serial);
-                            Serial.println();
-                            updateLED(entity.key().c_str(), entity.value().as<JsonObject>());
+                            const char* entity_id = entity.key().c_str();
+                            if (strcmp(entity_id, "sensor.time") == 0) {
+                                updateTimeAndCheckNightMode(entity.value()["s"]);
+                            } else {
+                                Serial.printf("Entity: %s, State: ", entity_id);
+                                serializeJson(entity.value(), Serial);
+                                Serial.println();
+                                updateLED(entity_id, entity.value().as<JsonObject>());
+                            }
                         }
                     } else if (event.containsKey("c")) {
                         Serial.println("Partial state update:");
@@ -233,13 +255,17 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                         for (JsonPair change : changes) {
                             const char* entity_id = change.key().c_str();
                             JsonObject state = change.value();
-                            Serial.printf("Entity: %s, Changes: ", entity_id);
-                            serializeJson(state, Serial);
-                            Serial.println();
-                            if (state.containsKey("+")) {
-                                state = state["+"];
+                            if (strcmp(entity_id, "sensor.time") == 0) {
+                                updateTimeAndCheckNightMode(state["s"]);
+                            } else {
+                                Serial.printf("Entity: %s, Changes: ", entity_id);
+                                serializeJson(state, Serial);
+                                Serial.println();
+                                if (state.containsKey("+")) {
+                                    state = state["+"];
+                                }
+                                updateLED(entity_id, state);
                             }
-                            updateLED(entity_id, state);
                         }
                     }
                 } else {
@@ -374,10 +400,11 @@ void adjustBrightness(int x, int y, bool increase) {
                 entityStates[i].brightness = newBrightness; // Update local state immediately
 
                 // Update LED immediately based on local state
+                float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
                 uint32_t color = strip.Color(
-                    map(entityStates[i].r, 0, 255, 0, newBrightness),
-                    map(entityStates[i].g, 0, 255, 0, newBrightness),
-                    map(entityStates[i].b, 0, 255, 0, newBrightness)
+                    map(entityStates[i].r, 0, 255, 0, newBrightness * scaleFactor),
+                    map(entityStates[i].g, 0, 255, 0, newBrightness * scaleFactor),
+                    map(entityStates[i].b, 0, 255, 0, newBrightness * scaleFactor)
                 );
                 int ledIndex = getLedIndex(entityMappings[i].x, entityMappings[i].y);
                 strip.setPixelColor(ledIndex, color);
@@ -396,7 +423,8 @@ void adjustBrightness(int x, int y, bool increase) {
                 serializeJson(doc, message);
                 webSocket.sendTXT(message);
 
-                Serial.printf("Adjusting brightness for %s to %d\n", entityMappings[i].entity_id, newBrightness);
+                Serial.printf("Adjusting brightness for %s to %d (Scaled: %d)\n", 
+                              entityMappings[i].entity_id, newBrightness, (int)(newBrightness * scaleFactor));
             }
             break;
         }
@@ -463,4 +491,20 @@ void showWebSocketConnectionFailedAnimation() {
     }
     strip.show();
     // No clearing of LEDs, they stay in the red-orange pattern
+}
+
+void updateTimeAndCheckNightMode(const char* time_str) {
+    int hour, minute;
+    sscanf(time_str, "%d:%d", &hour, &minute);
+    
+    bool newIsNightMode = (hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR);
+    
+    if (newIsNightMode != isNightMode) {
+        isNightMode = newIsNightMode;
+        Serial.printf("Night mode changed to: %s\n", isNightMode ? "ON" : "OFF");
+        // Update all LEDs with new brightness
+        for (int i = 0; i < NUM_MAPPINGS; i++) {
+            updateLED(entityMappings[i].entity_id, JsonObject());
+        }
+    }
 }
