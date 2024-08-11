@@ -7,6 +7,8 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 - Direct connection to Home Assistant over websocket
 - Support for toggling `switch` and `light` entities
 - State and brightness tracking for lights
+- Brightness control with special up and down buttons
+    - press this with any light to set the brightness, keep pressed to increase/decrease
 - Default color and brightness settings for switches
 - Visual feedback for connection status
 
@@ -32,30 +34,14 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 #define HA_API_PASSWORD "Your_Long_Lived_Access_Token_Here"
 ```
 
-4. Configure your entities in `src/main.cpp`:
+4. Entity Mappings
 
-```cpp
-// If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness!
-const EntityMapping entityMappings[] = {
-    {"light.nanoleaf", 0, 3, false, 255, 255, 255, 255},  // Nanoleaf light panel (position x:0, y:3, is_switch: false (doesn't follow light color), white)
-    {"light.bedroom", 0, 2, false, 255, 255, 255, 255},   // Main bedroom light (position x:0, y:2, is_switch: false, white)
-    {"light.hall", 0, 1, false, 255, 255, 255, 255},      // Hallway light (position x:0, y:1, is_switch: false, white)
-    {"switch.nanoleaf_flames_white_toggle", 0, 0, true, 255, 255, 255, 255},  // Nanoleaf effect toggle (position x:0, y:0, is_switch: true, white)
-    {"light.kitchen", 1, 3, false, 255, 255, 255, 255},   // Kitchen light (position x:1, y:3, is_switch: false, white)
-    {"light.desk", 1, 2, false, 255, 255, 255, 255},      // Desk lamp (position x:1, y:2, is_switch: false, white)
-    {"light.mi_desk_lamp_pro", 1, 1, false, 255, 255, 255, 255},  // Xiaomi desk lamp (position x:1, y:1, is_switch: false, white)
-    {"light.balcony_floor", 2, 3, true, 255, 255, 255, 255},  // Balcony floor light (position x:2, y:3, is_switch: true, white)
-    {"light.balcony_corner", 2, 2, true, 255, 255, 255, 255},  // Balcony corner light (position x:2, y:2, is_switch: true, white)
-    {"light.balcony_spotlight", 2, 1, true, 255, 255, 255, 255},  // Balcony spotlight (position x:2, y:1, is_switch: true, white)
-    {"switch.genelec_speaker", 5, 3, true, 0, 255, 255, 255},  // Genelec speaker power (position x:5, y:3, is_switch: true, cyan)
-    {"switch.bedroom_ac", 5, 2, true, 0, 255, 255, 255},  // Bedroom air conditioner (position x:5, y:2, is_switch: true, cyan)
-    {"switch.hall_ac", 5, 1, true, 0, 255, 255, 255},     // Hall air conditioner (position x:5, y:1, is_switch: true, cyan)
-    {"switch.mute_genelec_speaker", 5, 0, true, 255, 255, 255, 255},  // Mute Genelec speaker (position x:5, y:0, is_switch: true, white)
-    {"switch.iloud_speakers", 4, 3, true, 255, 255, 255, 255},  // iLoud speakers power (position x:4, y:3, is_switch: true, white)
-    {"switch.mac_mini_display_sleep", 4, 0, true, 255, 255, 255, 255}  // Mac Mini display sleep toggle (position x:4, y:0, is_switch: true, white)
-};
+To configure your entity mappings:
 
-```
+- Copy the `src/entity_mappings.h.example` file to `src/entity_mappings.h`.
+- Edit `src/entity_mappings.h` and replace the example mappings with your own Home Assistant entity mappings.
+
+
 
 ### Building and Flashing
 

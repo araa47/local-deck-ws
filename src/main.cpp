@@ -6,6 +6,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "secrets.h" 
+#include "entity_mappings.h"
 
 
 #define LED_PIN 8
@@ -19,16 +20,14 @@ const size_t JSON_BUFFER_SIZE = 16384; // 16KB
 #define DEBOUNCE_TIME 50 // milliseconds
 #define LONG_PRESS_TIME 1000 // milliseconds
 
-struct EntityMapping {
-    const char* entity_id;     // The Home Assistant entity ID
-    int x;                     // Column position on the LocalDeck (0-5)
-    int y;                     // Row position on the LocalDeck (0-3)
-    bool is_switch;            // True if it's a switch, false if it's a light
-    uint8_t default_r;         // Default red value (0-255) when on
-    uint8_t default_g;         // Default green value (0-255) when on
-    uint8_t default_b;         // Default blue value (0-255) when on
-    uint8_t default_brightness; // Default brightness (0-255) when on
-};
+// Special Up button for brightness control
+#define UP_BUTTON_X 2
+#define UP_BUTTON_Y 0
+// Special Down button for brightness control 
+#define DOWN_BUTTON_X 1
+#define DOWN_BUTTON_Y 0
+#define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
+const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
 
 struct EntityState {
     bool is_on;
@@ -36,27 +35,7 @@ struct EntityState {
     uint8_t brightness;
 };
 
-// If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness!
-const EntityMapping entityMappings[] = {
-    {"light.nanoleaf", 0, 3, false, 255, 255, 255, 255},  // Nanoleaf light panel (position x:0, y:3, is_switch: false (doesn't follow light color), white)
-    {"light.bedroom", 0, 2, false, 255, 255, 255, 255},   // Main bedroom light (position x:0, y:2, is_switch: false, white)
-    {"light.hall", 0, 1, false, 255, 255, 255, 255},      // Hallway light (position x:0, y:1, is_switch: false, white)
-    {"switch.nanoleaf_flames_white_toggle", 0, 0, true, 255, 255, 255, 255},  // Nanoleaf effect toggle (position x:0, y:0, is_switch: true, white)
-    {"light.kitchen", 1, 3, false, 255, 255, 255, 255},   // Kitchen light (position x:1, y:3, is_switch: false, white)
-    {"light.desk", 1, 2, false, 255, 255, 255, 255},      // Desk lamp (position x:1, y:2, is_switch: false, white)
-    {"light.mi_desk_lamp_pro", 1, 1, false, 255, 255, 255, 255},  // Xiaomi desk lamp (position x:1, y:1, is_switch: false, white)
-    {"light.balcony_floor", 2, 3, true, 255, 255, 255, 255},  // Balcony floor light (position x:2, y:3, is_switch: true, white)
-    {"light.balcony_corner", 2, 2, true, 255, 255, 255, 255},  // Balcony corner light (position x:2, y:2, is_switch: true, white)
-    {"light.balcony_spotlight", 2, 1, true, 255, 255, 255, 255},  // Balcony spotlight (position x:2, y:1, is_switch: true, white)
-    {"switch.genelec_speaker", 5, 3, true, 0, 255, 255, 255},  // Genelec speaker power (position x:5, y:3, is_switch: true, cyan)
-    {"switch.bedroom_ac", 5, 2, true, 0, 255, 255, 255},  // Bedroom air conditioner (position x:5, y:2, is_switch: true, cyan)
-    {"switch.hall_ac", 5, 1, true, 0, 255, 255, 255},     // Hall air conditioner (position x:5, y:1, is_switch: true, cyan)
-    {"switch.mute_genelec_speaker", 5, 0, true, 255, 255, 255, 255},  // Mute Genelec speaker (position x:5, y:0, is_switch: true, white)
-    {"switch.iloud_speakers", 4, 3, true, 255, 255, 255, 255},  // iLoud speakers power (position x:4, y:3, is_switch: true, white)
-    {"switch.mac_mini_display_sleep", 4, 0, true, 255, 255, 255, 255}  // Mac Mini display sleep toggle (position x:4, y:0, is_switch: true, white)
-};
 
-const int NUM_MAPPINGS = sizeof(entityMappings) / sizeof(entityMappings[0]);
 const int rowPins[ROWS] = {21, 20, 3, 7};
 const int colPins[COLS] = {0, 1, 10, 4, 5, 6};
 
@@ -74,12 +53,16 @@ void subscribeToEntities();
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 void toggleEntity(const char* entity_id);
 void buttonCheckTask(void * parameter);
+void adjustBrightness(int x, int y, bool increase);
 
 // Add these global variables
 unsigned long lastDebounceTime[ROWS][COLS] = {{0}};
 bool buttonState[ROWS][COLS] = {{false}};
 bool lastButtonState[ROWS][COLS] = {{false}};
 unsigned long buttonPressTime[ROWS][COLS] = {{0}};
+bool upButtonPressed = false;
+bool downButtonPressed = false;
+unsigned long lastBrightnessAdjustTime = 0;
 
 // Add these new function prototypes
 void showConnectingAnimation();
@@ -334,29 +317,33 @@ void buttonCheckTask(void * parameter) {
                             // Button is pressed
                             buttonPressTime[y][x] = millis();
                             
-                            // Blink the LED
-                            int ledIndex = getLedIndex(x, y);
-                            uint32_t originalColor = strip.getPixelColor(ledIndex);
-                            strip.setPixelColor(ledIndex, strip.Color(255, 255, 255)); // Set to white
-                            strip.show();
-                            delay(50); // Brief delay for the blink
-                            strip.setPixelColor(ledIndex, originalColor); // Restore original color
-                            strip.show();
+                            // Check if it's the up or down button
+                            if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
+                                upButtonPressed = true;
+                            } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
+                                downButtonPressed = true;
+                            }
                         } else {
                             // Button is released
-                            unsigned long pressDuration = millis() - buttonPressTime[y][x];
-                            
-                            if (pressDuration < LONG_PRESS_TIME) {
-                                // Short press
-                                for (int i = 0; i < NUM_MAPPINGS; i++) {
-                                    if (entityMappings[i].x == x && entityMappings[i].y == y) {
-                                        toggleEntity(entityMappings[i].entity_id);
-                                        break;
-                                    }
-                                }
+                            if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
+                                upButtonPressed = false;
+                            } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
+                                downButtonPressed = false;
                             } else {
-                                // Long press - you can add different functionality here if needed
-                                Serial.printf("Long press detected at x %d, y %d\n", x, y);
+                                unsigned long pressDuration = millis() - buttonPressTime[y][x];
+                                
+                                if (pressDuration < LONG_PRESS_TIME && !upButtonPressed && !downButtonPressed) {
+                                    // Short press
+                                    for (int i = 0; i < NUM_MAPPINGS; i++) {
+                                        if (entityMappings[i].x == x && entityMappings[i].y == y) {
+                                            toggleEntity(entityMappings[i].entity_id);
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    // Long press - you can add different functionality here if needed
+                                    Serial.printf("Long press detected at x %d, y %d\n", x, y);
+                                }
                             }
                         }
                     }
@@ -368,7 +355,69 @@ void buttonCheckTask(void * parameter) {
 
             pinMode(rowPins[y], INPUT);
         }
+
+        // Check for continuous brightness adjustment
+        if ((upButtonPressed || downButtonPressed) && (millis() - lastBrightnessAdjustTime > BRIGHTNESS_ADJUST_INTERVAL)) {
+            for (int y = 0; y < ROWS; y++) {
+                for (int x = 0; x < COLS; x++) {
+                    if (buttonState[y][x] && !(x == UP_BUTTON_X && y == UP_BUTTON_Y) && !(x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y)) {
+                        adjustBrightness(x, y, upButtonPressed);
+                    }
+                }
+            }
+            lastBrightnessAdjustTime = millis();
+        }
+
         vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+
+void adjustBrightness(int x, int y, bool increase) {
+    unsigned long currentTime = millis();
+    if (currentTime - lastBrightnessAdjustTime < BRIGHTNESS_ADJUST_INTERVAL) {
+        return; // Exit if not enough time has passed since the last adjustment
+    }
+    lastBrightnessAdjustTime = currentTime;
+
+    for (int i = 0; i < NUM_MAPPINGS; i++) {
+        if (entityMappings[i].x == x && entityMappings[i].y == y && !entityMappings[i].is_switch) {
+            int newBrightness = entityStates[i].brightness;
+            if (increase) {
+                newBrightness = min(255, newBrightness + BRIGHTNESS_STEP);
+            } else {
+                newBrightness = max(0, newBrightness - BRIGHTNESS_STEP);
+            }
+
+            if (newBrightness != entityStates[i].brightness) {
+                entityStates[i].brightness = newBrightness; // Update local state immediately
+
+                // Update LED immediately based on local state
+                uint32_t color = strip.Color(
+                    map(entityStates[i].r, 0, 255, 0, newBrightness),
+                    map(entityStates[i].g, 0, 255, 0, newBrightness),
+                    map(entityStates[i].b, 0, 255, 0, newBrightness)
+                );
+                int ledIndex = getLedIndex(entityMappings[i].x, entityMappings[i].y);
+                strip.setPixelColor(ledIndex, color);
+                strip.show();
+
+                // Send update to Home Assistant
+                DynamicJsonDocument doc(1024);
+                doc["id"] = messageId++;
+                doc["type"] = "call_service";
+                doc["domain"] = "light";
+                doc["service"] = "turn_on";
+                doc["target"]["entity_id"] = entityMappings[i].entity_id;
+                doc["service_data"]["brightness"] = newBrightness;
+
+                String message;
+                serializeJson(doc, message);
+                webSocket.sendTXT(message);
+
+                Serial.printf("Adjusting brightness for %s to %d\n", entityMappings[i].entity_id, newBrightness);
+            }
+            break;
+        }
     }
 }
 
