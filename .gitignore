@@ -6,7 +6,7 @@
 # Ignore the actual secrets file
 include/secrets.h
 # Ignore the entity mappings file
-include/entity_mappings.h
+include/config.h
 # Other common ignores
 *.swp
 .DS_Store

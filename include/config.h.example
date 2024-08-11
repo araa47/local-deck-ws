@@ -1,8 +1,27 @@
-#ifndef ENTITY_MAPPINGS_H
-#define ENTITY_MAPPINGS_H
+#ifndef CONFIG_H
+#define CONFIG_H
 
 #include <Arduino.h>
 
+// Configuration settings
+#define LED_PIN 8
+#define NUM_LEDS 24
+#define ROWS 4
+#define COLS 6
+
+#define DEBOUNCE_TIME 50 // milliseconds
+#define LONG_PRESS_TIME 1000 // milliseconds
+
+// Special Up button for brightness control
+#define UP_BUTTON_X 2
+#define UP_BUTTON_Y 0
+// Special Down button for brightness control 
+#define DOWN_BUTTON_X 1
+#define DOWN_BUTTON_Y 0
+#define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
+const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
+
+// Entity mapping structure
 struct EntityMapping {
     const char* entity_id;
     int x;
@@ -49,4 +68,4 @@ const EntityMapping entityMappings[] = {
 
 const int NUM_MAPPINGS = sizeof(entityMappings) / sizeof(entityMappings[0]);
 
-#endif // ENTITY_MAPPINGS_H
+#endif // CONFIG_H

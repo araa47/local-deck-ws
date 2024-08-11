@@ -38,8 +38,8 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 
 To configure your entity mappings:
 
-- Copy the `src/entity_mappings.h.example` file to `src/entity_mappings.h`.
-- Edit `src/entity_mappings.h` and replace the example mappings with your own Home Assistant entity mappings.
+- Copy the `src/config.h.example` file to `src/config.h`.
+- Edit `src/config.h` and replace the example mappings with your own Home Assistant entity mappings.
 
 
 

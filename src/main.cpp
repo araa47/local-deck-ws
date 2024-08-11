@@ -6,29 +6,11 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "secrets.h" 
-#include "entity_mappings.h"
+#include "config.h"
 
 
-#define LED_PIN 8
-#define NUM_LEDS 24
-#define ROWS 4
-#define COLS 6
 
 const size_t JSON_BUFFER_SIZE = 16384; // 16KB
-
-// Add these definitions at the top of your file, after other #define statements
-#define DEBOUNCE_TIME 50 // milliseconds
-#define LONG_PRESS_TIME 1000 // milliseconds
-
-// Special Up button for brightness control
-#define UP_BUTTON_X 2
-#define UP_BUTTON_Y 0
-// Special Down button for brightness control 
-#define DOWN_BUTTON_X 1
-#define DOWN_BUTTON_Y 0
-#define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
-const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
-
 struct EntityState {
     bool is_on;
     uint8_t r, g, b;
