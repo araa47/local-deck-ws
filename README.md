@@ -40,7 +40,8 @@ To configure your entity mappings:
 
 - Copy the `src/config.h.example` file to `src/config.h`.
 - Edit `src/config.h` and replace the example mappings with your own Home Assistant entity mappings.
-
+- The Up and Down buttons in the config use the coordinates 2,0 and 1,0 respectively, and may be changed in the config.h file
+- Note you will need to make sure in EntityMapping you do not set an entity for the Up and Down buttons if you want to use the brightness control
 
 
 ### Building and Flashing

@@ -12,12 +12,16 @@
 #define DEBOUNCE_TIME 50 // milliseconds
 #define LONG_PRESS_TIME 1000 // milliseconds
 
-// Special Up button for brightness control
+
+
+// Special Up button for brightness control (coordinates 2,0)
 #define UP_BUTTON_X 2
 #define UP_BUTTON_Y 0
-// Special Down button for brightness control 
+// Special Down button for brightness control (coordinates 1,0)
 #define DOWN_BUTTON_X 1
 #define DOWN_BUTTON_Y 0
+
+
 #define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
 const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
 
@@ -33,6 +37,7 @@ struct EntityMapping {
     uint8_t default_brightness;
 };
 
+// If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness of the entity if exists!
 const EntityMapping entityMappings[] = {
     {"switch.example", 0, 0, true, 255, 255, 255, 255},  // Example switch
     {"light.example", 0, 1, false, 255, 255, 255, 255},  // Example light
