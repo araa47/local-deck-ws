@@ -8,6 +8,7 @@
 #include <freertos/semphr.h>
 #include "secrets.h" 
 #include "config.h"
+#include "constants.h"
 
 struct EntityState {       
     bool is_on;
