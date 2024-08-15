@@ -9,15 +9,13 @@
 #include "secrets.h" 
 #include "config.h"
 
-const size_t JSON_BUFFER_SIZE = 16384; // 16KB Anything less leads to esp to crash when first connecting to WS
 struct EntityState {       
     bool is_on;
     uint8_t r, g, b;
     uint8_t brightness;
 };
 
-const int rowPins[ROWS] = {21, 20, 3, 7};
-const int colPins[COLS] = {0, 1, 10, 4, 5, 6};
+
 
 WebSocketsClient webSocket;
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -54,15 +52,11 @@ void showWiFiConnectedAnimation();
 void showWebSocketConnectedAnimation();
 void showConnectionFailedAnimation();
 void showWebSocketConnectionFailedAnimation();
+uint32_t applyBrightnessScalar(uint32_t color);
 
 // Night mode variables
 bool isNightMode = false;
 int currentHour = -1;
-
-// Constants for animations
-const int ANIMATION_DELAY_SHORT = 50;
-const int ANIMATION_DELAY_MEDIUM = 100;
-const int ANIMATION_REPEAT_COUNT = 3;
 
 void setup() {
     Serial.begin(115200);
@@ -471,9 +465,9 @@ void updateTimeAndCheckNightMode(const char* time_str) {
 }
 
 void showConnectingAnimation() {
-    Serial.println("Showing connecting animation");
+    Serial.println("Showing connecting animation (Blue)");
     for (int i = 0; i < NUM_LEDS; i++) {
-        strip.setPixelColor(i, strip.Color(0, 0, 50));
+        strip.setPixelColor(i, applyBrightnessScalar(COLOR_BLUE));
         strip.show();
         delay(ANIMATION_DELAY_SHORT);
     }
@@ -482,10 +476,10 @@ void showConnectingAnimation() {
 }
 
 void showWiFiConnectedAnimation() {
-    Serial.println("Showing WiFi connected animation");
+    Serial.println("Showing WiFi connected animation (Green)");
     for (int i = 0; i < ANIMATION_REPEAT_COUNT; i++) {
         for (int j = 0; j < NUM_LEDS; j++) {
-            strip.setPixelColor(j, strip.Color(0, 255, 0));
+            strip.setPixelColor(j, applyBrightnessScalar(COLOR_GREEN));
         }
         strip.show();
         delay(ANIMATION_DELAY_MEDIUM);
@@ -496,10 +490,10 @@ void showWiFiConnectedAnimation() {
 }
 
 void showWebSocketConnectedAnimation() {
-    Serial.println("Showing WebSocket connected animation");
+    Serial.println("Showing WebSocket connected animation (Cyan and Yellow)");
     for (int i = 0; i < ANIMATION_REPEAT_COUNT; i++) {
         for (int j = 0; j < NUM_LEDS; j++) {
-            strip.setPixelColor(j, j % 2 == 0 ? strip.Color(0, 255, 255) : strip.Color(255, 255, 0));
+            strip.setPixelColor(j, applyBrightnessScalar(j % 2 == 0 ? COLOR_CYAN : COLOR_YELLOW));
         }
         strip.show();
         delay(ANIMATION_DELAY_MEDIUM);
@@ -510,19 +504,31 @@ void showWebSocketConnectedAnimation() {
 }
 
 void showConnectionFailedAnimation() {
-    Serial.println("Showing connection failed animation");
+    Serial.println("Showing connection failed animation (Red)");
     strip.clear();
     for (int j = 0; j < NUM_LEDS; j++) {
-        strip.setPixelColor(j, strip.Color(255, 0, 0));
+        strip.setPixelColor(j, applyBrightnessScalar(COLOR_RED));
     }
     strip.show();
 }
 
 void showWebSocketConnectionFailedAnimation() {
-    Serial.println("Showing WebSocket connection failed animation");
+    Serial.println("Showing WebSocket connection failed animation (Red and Orange)");
     strip.clear();
     for (int j = 0; j < NUM_LEDS; j++) {
-        strip.setPixelColor(j, j % 2 == 0 ? strip.Color(255, 0, 0) : strip.Color(255, 165, 0));
+        strip.setPixelColor(j, applyBrightnessScalar(j % 2 == 0 ? COLOR_RED : COLOR_ORANGE));
     }
     strip.show();
+}
+
+uint32_t applyBrightnessScalar(uint32_t color) {
+    uint8_t r = (uint8_t)(color >> 16);
+    uint8_t g = (uint8_t)(color >> 8);
+    uint8_t b = (uint8_t)color;
+    
+    r = (uint8_t)(r * ANIMATION_BRIGHTNESS_SCALAR);
+    g = (uint8_t)(g * ANIMATION_BRIGHTNESS_SCALAR);
+    b = (uint8_t)(b * ANIMATION_BRIGHTNESS_SCALAR);
+    
+    return strip.Color(r, g, b);
 }

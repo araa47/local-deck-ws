@@ -9,6 +9,10 @@
 #define ROWS 4
 #define COLS 6
 
+// Pin definitions
+const int rowPins[ROWS] = {21, 20, 3, 7};
+const int colPins[COLS] = {0, 1, 10, 4, 5, 6};
+
 #define DEBOUNCE_TIME 50 // milliseconds
 #define LONG_PRESS_TIME 1000 // milliseconds
 
@@ -28,6 +32,23 @@
 
 #define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
 const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
+
+// Constants for animations
+const int ANIMATION_DELAY_SHORT = 50;
+const int ANIMATION_DELAY_MEDIUM = 100;
+const int ANIMATION_REPEAT_COUNT = 3;
+const float ANIMATION_BRIGHTNESS_SCALAR = 0.07f; // Adjust this value to change overall brightness
+
+// JSON buffer size
+const size_t JSON_BUFFER_SIZE = 16384; // 16KB Anything less leads to esp to crash when first connecting to WS
+
+// Color definitions
+#define COLOR_BLUE    0x0000FF
+#define COLOR_GREEN   0x00FF00
+#define COLOR_CYAN    0x00FFFF
+#define COLOR_YELLOW  0xFFFF00
+#define COLOR_RED     0xFF0000
+#define COLOR_ORANGE  0xFFA500
 
 // Entity mapping structure
 struct EntityMapping {
