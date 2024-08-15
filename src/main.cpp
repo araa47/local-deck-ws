@@ -9,7 +9,7 @@
 #include "secrets.h" 
 #include "config.h"
 
-const size_t JSON_BUFFER_SIZE = 16384; // 16KB
+const size_t JSON_BUFFER_SIZE = 16384; // 16KB Anything less leads to esp to crash when first connecting to WS
 struct EntityState {       
     bool is_on;
     uint8_t r, g, b;
@@ -66,7 +66,7 @@ const int ANIMATION_REPEAT_COUNT = 3;
 
 void setup() {
     Serial.begin(115200);
-    delay(1000); // Give some time for serial to initialize
+    delay(300); // Give some time for serial to initialize
     Serial.println("Starting setup...");
 
     strip.begin();
@@ -76,6 +76,8 @@ void setup() {
     if (xMutex == NULL) {
         Serial.println("Failed to create mutex");
         return;
+    } else {
+        Serial.println("Mutex created");
     }
 
     showConnectingAnimation();
@@ -353,7 +355,7 @@ void buttonCheckTask(void * parameter) {
                                         }
                                     }
                                 } else {
-                                    Serial.printf("Long press detected at x %d, y %d\n", x, y);
+                                    Serial.printf("Long press detected at (x: %d, y: %d)\n", x, y);
                                 }
                             }
                         }
@@ -449,11 +451,14 @@ void updateTimeAndCheckNightMode(const char* time_str) {
         return;
     }
 
-    bool newIsNightMode = (hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR);
+    bool newIsNightMode;
     if (NIGHT_START_HOUR > NIGHT_END_HOUR) {
+        // Night mode spans midnight
+        newIsNightMode = (hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR);
+    } else {
+        // Night mode doesn't span midnight
         newIsNightMode = (hour >= NIGHT_START_HOUR && hour < NIGHT_END_HOUR);
     }
-    
     if (newIsNightMode != isNightMode) {
         isNightMode = newIsNightMode;
         Serial.printf("Night mode changed to: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
@@ -466,6 +471,7 @@ void updateTimeAndCheckNightMode(const char* time_str) {
 }
 
 void showConnectingAnimation() {
+    Serial.println("Showing connecting animation");
     for (int i = 0; i < NUM_LEDS; i++) {
         strip.setPixelColor(i, strip.Color(0, 0, 50));
         strip.show();
@@ -476,6 +482,7 @@ void showConnectingAnimation() {
 }
 
 void showWiFiConnectedAnimation() {
+    Serial.println("Showing WiFi connected animation");
     for (int i = 0; i < ANIMATION_REPEAT_COUNT; i++) {
         for (int j = 0; j < NUM_LEDS; j++) {
             strip.setPixelColor(j, strip.Color(0, 255, 0));
@@ -489,6 +496,7 @@ void showWiFiConnectedAnimation() {
 }
 
 void showWebSocketConnectedAnimation() {
+    Serial.println("Showing WebSocket connected animation");
     for (int i = 0; i < ANIMATION_REPEAT_COUNT; i++) {
         for (int j = 0; j < NUM_LEDS; j++) {
             strip.setPixelColor(j, j % 2 == 0 ? strip.Color(0, 255, 255) : strip.Color(255, 255, 0));
@@ -502,6 +510,7 @@ void showWebSocketConnectedAnimation() {
 }
 
 void showConnectionFailedAnimation() {
+    Serial.println("Showing connection failed animation");
     strip.clear();
     for (int j = 0; j < NUM_LEDS; j++) {
         strip.setPixelColor(j, strip.Color(255, 0, 0));
@@ -510,6 +519,7 @@ void showConnectionFailedAnimation() {
 }
 
 void showWebSocketConnectionFailedAnimation() {
+    Serial.println("Showing WebSocket connection failed animation");
     strip.clear();
     for (int j = 0; j < NUM_LEDS; j++) {
         strip.setPixelColor(j, j % 2 == 0 ? strip.Color(255, 0, 0) : strip.Color(255, 165, 0));
