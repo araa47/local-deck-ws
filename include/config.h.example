@@ -45,35 +45,41 @@ struct EntityMapping {
 
 // If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness of the entity if exists!
 const EntityMapping entityMappings[] = {
-    {"switch.example", 0, 0, true, 255, 255, 255, 255},  // Example switch
-    {"light.example", 0, 1, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 0, 2, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 0, 3, false, 255, 255, 255, 255},  // Example light
+    // Column 0 (x = 0)
+    {"light.example_1", 0, 3, false, 255, 255, 255, 255},  // Example light 1 (top left corner)
+    {"light.example_2", 0, 2, false, 255, 255, 255, 255},  // Example light 2
+    {"light.example_3", 0, 1, false, 255, 255, 255, 255},  // Example light 3
+    {"switch.example_1", 0, 0, true, 255, 165, 0, 10},     // Example switch 1 (orange) (bottom left corner)
 
+    // Column 1 (x = 1)
+    {"light.example_4", 1, 3, false, 255, 255, 255, 255},  // Example light 4
+    {"light.example_5", 1, 2, false, 255, 255, 255, 255},  // Example light 5
+    {"light.example_6", 1, 1, false, 255, 255, 255, 255},  // Example light 6
     // 1,0 is reserved for brightness decrease modifier
-    {"light.example", 1, 1, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 1, 2, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 1, 3, false, 255, 255, 255, 255},  // Example light
 
+    // Column 2 (x = 2)
+    {"light.example_7", 2, 3, true, 255, 154, 0, 10},      // Example light 7
+    {"light.example_8", 2, 2, true, 255, 154, 0, 10},      // Example light 8
+    {"light.example_9", 2, 1, true, 255, 154, 0, 255},     // Example light 9
     // 2,0 is reserved for brightness increase modifier
-    {"switch.example", 2, 1, true, 255, 255, 255, 255},  // Example switch
-    {"switch.example", 2, 2, true, 255, 255, 255, 255},  // Example switch
-    {"switch.example", 2, 3, true, 255, 255, 255, 255},  // Example switch
 
-    {"light.example", 3, 0, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 3, 1, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 3, 2, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 3, 3, false, 255, 255, 255, 255},  // Example light
+    // Column 3 (x = 3)
+    {"light.example_10", 3, 3, false, 255, 255, 255, 255}, // Example light 10
+    {"script.example_1", 3, 2, false, 255, 255, 255, 255}, // Example script 1
+    {"script.example_2", 3, 1, true, 0, 255, 0, 255},      // Example script 2 (green)
+    {"script.example_3", 3, 0, true, 0, 255, 0, 255},      // Example script 3 (green)
 
-    {"switch.example", 4, 0, true, 255, 255, 255, 255},  // Example switch
-    {"light.example", 4, 1, false, 255, 255, 255, 255},  // Example light
-    {"light.example", 4, 2, false, 255, 255, 255, 255},  // Example light
-    {"switch.example", 4, 3, true, 255, 255, 255, 255},  // Example switch
+    // Column 4 (x = 4)
+    {"switch.example_2", 4, 3, true, 255, 0, 255, 255},    // Example switch 2 (magenta)
+    {"script.example_4", 4, 2, false, 255, 255, 255, 255}, // Example script 4
+    {"switch.example_3", 4, 1, false, 0, 255, 0, 255},     // Example switch 3 (green)
+    {"switch.example_4", 4, 0, true, 255, 255, 255, 255},  // Example switch 4
 
-    {"switch.example", 5, 0, true, 255, 255, 255, 255},  // Example switch
-    {"switch.example", 5, 1, true, 255, 255, 255, 255},  // Example switch
-    {"switch.example", 5, 2, true, 255, 255, 255, 255},  // Example switch
-    {"switch.example", 5, 3, true, 255, 255, 255, 255},  // Example switch
+    // Column 5 (x = 5)
+    {"switch.example_5", 5, 3, true, 255, 0, 255, 20},     // Example switch 5 (magenta) (top right corner)
+    {"switch.example_6", 5, 2, true, 0, 255, 255, 10},     // Example switch 6 (cyan)
+    {"switch.example_7", 5, 1, true, 0, 255, 255, 10},     // Example switch 7 (cyan)
+    {"switch.example_8", 5, 0, true, 255, 255, 255, 255},  // Example switch 8 (bottom right corner)
 };
 
 
