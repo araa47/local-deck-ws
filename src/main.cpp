@@ -222,32 +222,44 @@ void updateLED(int x, int y, const JsonObject& state) {
                 currentState.is_on = (state["s"] == "on");
             }
 
-            if (currentState.is_on) {
-                JsonObject attributes = state["a"];
-                if (attributes.containsKey("rgb_color")) {
-                    JsonArray rgb = attributes["rgb_color"];
-                    currentState.r = rgb[0];
-                    currentState.g = rgb[1];
-                    currentState.b = rgb[2];
-                }
-                if (attributes.containsKey("brightness")) {
-                    currentState.brightness = attributes["brightness"];
-                }
+            JsonObject attributes = state["a"];
+            if (attributes.isNull()) {
+                // If attributes are null, this might be a switch. Update only the on/off state.
+                currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
-                currentState.brightness = 0;
+                if (currentState.is_on) {
+                    if (attributes.containsKey("rgb_color")) {
+                        JsonArray rgb = attributes["rgb_color"];
+                        currentState.r = rgb[0];
+                        currentState.g = rgb[1];
+                        currentState.b = rgb[2];
+                    }
+                    if (attributes.containsKey("brightness")) {
+                        currentState.brightness = attributes["brightness"];
+                    } else {
+                        currentState.brightness = 255; // Default to full brightness if not specified
+                    }
+                } else {
+                    currentState.brightness = 0;
+                }
             }
         }
 
         float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
         
-        uint32_t color = strip.Color(
-            map(currentState.r, 0, 255, 0, currentState.brightness * scaleFactor),
-            map(currentState.g, 0, 255, 0, currentState.brightness * scaleFactor),
-            map(currentState.b, 0, 255, 0, currentState.brightness * scaleFactor)
-        );
+        uint32_t color;
+        if (currentState.is_on) {
+            color = strip.Color(
+                map(currentState.r, 0, 255, 0, currentState.brightness * scaleFactor),
+                map(currentState.g, 0, 255, 0, currentState.brightness * scaleFactor),
+                map(currentState.b, 0, 255, 0, currentState.brightness * scaleFactor)
+            );
+        } else {
+            color = strip.Color(0, 0, 0);
+        }
 
         int ledIndex = getLedIndex(x, y);
-        strip.setPixelColor(ledIndex, currentState.is_on ? color : strip.Color(0, 0, 0));
+        strip.setPixelColor(ledIndex, color);
         strip.show();
 
         xSemaphoreGive(xMutex);
