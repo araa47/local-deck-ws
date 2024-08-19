@@ -5,9 +5,9 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 ## Features
 
 - Direct connection to Home Assistant over websocket
-- Support for toggling `switch` and `light` entities and `script` entities with a single press
+- Support for toggling `switch`,`light`,`cover` and `script` entities with a single press
 - State and brightness tracking for lights
-- Brightness control with special up and down buttons
+- Brightness control with special up and down buttons (lights only)
     - press this with any light to set the brightness, keep pressed to increase/decrease
 - Default color and brightness settings for switches
 - Visual feedback for connection status
