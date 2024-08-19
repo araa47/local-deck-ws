@@ -9,13 +9,14 @@
 #include "secrets.h" 
 #include "config.h"
 #include "constants.h"
+#include <esp_system.h>
+#include <esp_heap_caps.h>
 
 struct EntityState {       
     bool is_on;
     uint8_t r, g, b;
     uint8_t brightness;
 };
-
 
 
 WebSocketsClient webSocket;
@@ -37,6 +38,7 @@ void adjustBrightness(int x, int y, bool increase);
 void updateTimeAndCheckNightMode(const char* time_str);
 bool connectToWiFi(unsigned long timeout);
 void reconnectWebSocket();
+void printMemoryUsage();
 
 // Global variables
 unsigned long lastDebounceTime[ROWS][COLS] = {{0}};
@@ -46,6 +48,14 @@ unsigned long buttonPressTime[ROWS][COLS] = {{0}};
 bool upButtonPressed = false;
 bool downButtonPressed = false;
 unsigned long lastBrightnessAdjustTime = 0;
+
+EntityState savedStates[NUM_MAPPINGS];
+bool isBrightnessAdjustmentMode = false;
+int currentAdjustmentBrightness = 0;
+unsigned long brightnessAdjustmentStartTime = 0;
+// Variables to track the last adjusted x and y coordinates
+int lastAdjustedX = -1;
+int lastAdjustedY = -1;
 
 // Animation function prototypes
 void showConnectingAnimation();
@@ -59,10 +69,19 @@ uint32_t applyBrightnessScalar(uint32_t color);
 bool isNightMode = false;
 int currentHour = -1;
 
+
+
+// New function prototypes
+void saveCurrentStates();
+void restoreStates();
+void displayBrightnessLevel(int brightness);
+void sendBrightnessUpdate(const char* entity_id, int brightness);
+
 void setup() {
     Serial.begin(115200);
     delay(300); // Give some time for serial to initialize
     Serial.println("Starting setup...");
+    printMemoryUsage();
 
     strip.begin();
     strip.show();
@@ -99,9 +118,18 @@ void setup() {
         1,
         NULL
     );
+
+    Serial.println("Setup complete.");
+    printMemoryUsage();
 }
 
 void loop() {
+    static unsigned long lastMemoryPrint = 0;
+    if (millis() - lastMemoryPrint > 10000) {  // Print memory usage every 10 seconds
+        printMemoryUsage();
+        lastMemoryPrint = millis();
+    }
+
     webSocket.loop();
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -135,6 +163,7 @@ int getLedIndex(int x, int y) {
 }
 
 void updateLED(const char* entity_id, const JsonObject& state) {
+    Serial.printf("Updating LED for entity: %s\n", entity_id);
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
         const EntityMapping* mapping = nullptr;
         int mappingIndex = -1;
@@ -224,6 +253,8 @@ void subscribeToEntities() {
 }
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+    Serial.printf("WebSocket event type: %d\n", type);
+    
     switch(type) {
         case WStype_DISCONNECTED:
             Serial.println("WebSocket disconnected");
@@ -236,6 +267,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             break;
         case WStype_TEXT:
             {
+                Serial.printf("Received WebSocket text message. Length: %d\n", length);
                 DynamicJsonDocument doc(JSON_BUFFER_SIZE);
                 DeserializationError error = deserializeJson(doc, payload, DeserializationOption::NestingLimit(10));
                 
@@ -305,6 +337,9 @@ void toggleEntity(const char* entity_id) {
 }
 
 void buttonCheckTask(void * parameter) {
+    Serial.println("Button check task started");
+    printMemoryUsage();
+
     TickType_t xLastWakeTime;
     const TickType_t xFrequency = pdMS_TO_TICKS(10);
     xLastWakeTime = xTaskGetTickCount();
@@ -373,6 +408,23 @@ void buttonCheckTask(void * parameter) {
                 }
             }
             lastBrightnessAdjustTime = millis();
+        } else if (!upButtonPressed && !downButtonPressed && isBrightnessAdjustmentMode) {
+            for (int i = 0; i < NUM_MAPPINGS; i++) {
+                if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
+                    sendBrightnessUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
+                    entityStates[i].brightness = currentAdjustmentBrightness;
+                    break;
+                }
+            }
+            isBrightnessAdjustmentMode = false;
+            restoreStates();
+        }
+
+        static unsigned long lastTaskMemoryPrint = 0;
+        if (millis() - lastTaskMemoryPrint > 30000) {  // Print task memory usage every 30 seconds
+            Serial.println("Button check task running");
+            printMemoryUsage();
+            lastTaskMemoryPrint = millis();
         }
 
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
@@ -380,46 +432,34 @@ void buttonCheckTask(void * parameter) {
 }
 
 void adjustBrightness(int x, int y, bool increase) {
+    Serial.printf("Adjusting brightness: x=%d, y=%d, increase=%d\n", x, y, increase);
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
         for (int i = 0; i < NUM_MAPPINGS; i++) {
             if (entityMappings[i].x == x && entityMappings[i].y == y && !entityMappings[i].is_switch) {
-                int newBrightness = entityStates[i].brightness;
+                if (!isBrightnessAdjustmentMode) {
+                    isBrightnessAdjustmentMode = true;
+                    saveCurrentStates();
+                    currentAdjustmentBrightness = entityStates[i].brightness;
+                    brightnessAdjustmentStartTime = millis();
+                    lastAdjustedX = x;
+                    lastAdjustedY = y;
+                }
+
                 if (increase) {
-                    newBrightness = min(255, newBrightness + BRIGHTNESS_STEP);
+                    currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_STEP);
                 } else {
-                    newBrightness = max(0, newBrightness - BRIGHTNESS_STEP);
+                    currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_STEP);
                 }
 
-                if (newBrightness != entityStates[i].brightness) {
-                    entityStates[i].brightness = newBrightness;
+                displayBrightnessLevel(currentAdjustmentBrightness);
 
-                    float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
-                    uint32_t color = strip.Color(
-                        map(entityStates[i].r, 0, 255, 0, newBrightness * scaleFactor),
-                        map(entityStates[i].g, 0, 255, 0, newBrightness * scaleFactor),
-                        map(entityStates[i].b, 0, 255, 0, newBrightness * scaleFactor)
-                    );
-                    int ledIndex = getLedIndex(entityMappings[i].x, entityMappings[i].y);
-                    strip.setPixelColor(ledIndex, color);
-                    strip.show();
-
-                    xSemaphoreGive(xMutex);
-
-                    DynamicJsonDocument doc(1024);
-                    doc["id"] = messageId++;
-                    doc["type"] = "call_service";
-                    doc["domain"] = "light";
-                    doc["service"] = "turn_on";
-                    doc["target"]["entity_id"] = entityMappings[i].entity_id;
-                    doc["service_data"]["brightness"] = newBrightness;
-
-                    String message;
-                    serializeJson(doc, message);
-                    webSocket.sendTXT(message);
-
-                    Serial.printf("Adjusting brightness for %s to %d (Scaled: %d)\n", 
-                                  entityMappings[i].entity_id, newBrightness, (int)(newBrightness * scaleFactor));
+                if (millis() - brightnessAdjustmentStartTime > BRIGHTNESS_ADJUST_TIMEOUT) {
+                    sendBrightnessUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
+                    entityStates[i].brightness = currentAdjustmentBrightness;
+                    isBrightnessAdjustmentMode = false;
+                    restoreStates();
                 }
+
                 break;
             }
         }
@@ -532,4 +572,48 @@ uint32_t applyBrightnessScalar(uint32_t color) {
     b = (uint8_t)(b * ANIMATION_BRIGHTNESS_SCALAR);
     
     return strip.Color(r, g, b);
+}
+
+void saveCurrentStates() {
+    memcpy(savedStates, entityStates, sizeof(EntityState) * NUM_MAPPINGS);
+}
+
+void restoreStates() {
+    for (int i = 0; i < NUM_MAPPINGS; i++) {
+        updateLED(entityMappings[i].entity_id, JsonObject());
+    }
+}
+
+void displayBrightnessLevel(int brightness) {
+    int litLEDs = map(brightness, 0, 255, 0, NUM_LEDS);
+    for (int i = 0; i < NUM_LEDS; i++) {
+        if (i < litLEDs) {
+            strip.setPixelColor(i, strip.Color(255, 255, 255));
+        } else {
+            strip.setPixelColor(i, strip.Color(0, 0, 0));
+        }
+    }
+    strip.show();
+}
+
+void sendBrightnessUpdate(const char* entity_id, int brightness) {
+    DynamicJsonDocument doc(1024);
+    doc["id"] = messageId++;
+    doc["type"] = "call_service";
+    doc["domain"] = "light";
+    doc["service"] = "turn_on";
+    doc["target"]["entity_id"] = entity_id;
+    doc["service_data"]["brightness"] = brightness;
+
+    String message;
+    serializeJson(doc, message);
+    webSocket.sendTXT(message);
+
+    Serial.printf("Adjusting brightness for %s to %d\n", entity_id, brightness);
+}
+
+void printMemoryUsage() {
+    Serial.printf("Free heap: %d, Largest free block: %d\n", 
+                  esp_get_free_heap_size(), 
+                  heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 }
