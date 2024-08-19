@@ -85,7 +85,7 @@ int currentHour = -1;
 // New function prototypes
 void saveCurrentStates();
 void restoreStates();
-void displayBrightnessLevel(int brightness);
+void displayBrightnessLevel(int brightness, uint8_t r, uint8_t g, uint8_t b);
 void sendBrightnessUpdate(const char* entity_id, int brightness);
 
 // Add this global variable
@@ -561,7 +561,11 @@ bool adjustBrightness(int x, int y, bool increase) {
                 }
                 Serial.printf("Adjusted brightness to %d\n", currentAdjustmentBrightness);
 
-                displayBrightnessLevel(currentAdjustmentBrightness);
+                // Pass the color information to displayBrightnessLevel
+                displayBrightnessLevel(currentAdjustmentBrightness, 
+                                       entityStates[y][x].r, 
+                                       entityStates[y][x].g, 
+                                       entityStates[y][x].b);
 
                 if (millis() - brightnessAdjustmentStartTime > BRIGHTNESS_ADJUST_TIMEOUT) {
                     Serial.println("Brightness adjustment timeout reached");
@@ -704,11 +708,16 @@ void restoreStates() {
     }
 }
 
-void displayBrightnessLevel(int brightness) {
+void displayBrightnessLevel(int brightness, uint8_t r, uint8_t g, uint8_t b) {
+    float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
     int litLEDs = map(brightness, 0, 255, 0, NUM_LEDS);
+    
     for (int i = 0; i < NUM_LEDS; i++) {
         if (i < litLEDs) {
-            strip.setPixelColor(i, strip.Color(255, 255, 255));
+            uint8_t scaledR = (uint8_t)(r * scaleFactor);
+            uint8_t scaledG = (uint8_t)(g * scaleFactor);
+            uint8_t scaledB = (uint8_t)(b * scaleFactor);
+            strip.setPixelColor(i, strip.Color(scaledR, scaledG, scaledB));
         } else {
             strip.setPixelColor(i, strip.Color(0, 0, 0));
         }
