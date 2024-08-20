@@ -2,6 +2,9 @@
 
 This repository contains alternative firmware for the [LocalDeck](https://www.mylocalbytes.com/products/localdeck) device. This firmware connects directly to Home Assistant via WebSocket API, providing a customizable and responsive interface for controlling your smart home devices.
 
+![Normal](images/normal.png)
+
+
 ## Features
 
 - Direct connection to Home Assistant over websocket
@@ -9,6 +12,11 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 - State and brightness tracking for lights
 - Brightness control with special up and down buttons (lights only)
     - press this with any light to set the brightness, keep pressed to increase/decrease
+
+![Brightness Control](images/brightness.gif)
+
+
+
 - Default color and brightness settings for switches
 - Visual feedback for connection status
 
@@ -55,9 +63,21 @@ After flashing the firmware and powering on the LocalDeck, it will attempt to co
 ### Connection Status Indicators
 
 - Blue moving light: Connecting to Wi-Fi
+
+![WiFi Connecting](images/wificonnecting.gif)
+
 - Green flashing: Connected to Wi-Fi
+
+![WiFi Connected](images/wificonnected.gif)
+
 - Cyan and Yellow alternating: Connected to Home Assistant WebSocket
+
+![WiFi Connected](images/wsconnected.gif)
+
+
 - Solid Red: Failed to connect to Wi-Fi
+
+
 - Red and Orange alternating: Failed to connect to Home Assistant WebSocket
 
 ### Controlling Devices
