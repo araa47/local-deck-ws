@@ -19,9 +19,16 @@ struct EntityState {
     uint8_t brightness;
     int x, y;
 };
+// Add this near the top of the file, after the includes
+#define ENABLE_SERIAL_LOGGING false
 
-#define MAX_QUEUED_MESSAGES 20
-#define BRIGHTNESS_UPDATE_TIMEOUT_MS 10000
+// Function to conditionally print to serial
+#define SERIAL_PRINT(x) if (ENABLE_SERIAL_LOGGING) Serial.print(x)
+#define SERIAL_PRINTLN(x) if (ENABLE_SERIAL_LOGGING) Serial.println(x)
+#define SERIAL_PRINTF(format, ...) if (ENABLE_SERIAL_LOGGING) Serial.printf(format, __VA_ARGS__)
+
+#define MAX_QUEUED_MESSAGES 50
+#define BRIGHTNESS_UPDATE_TIMEOUT_MS 20000
 struct QueuedMessage {
     char* payload;
     size_t length;
@@ -92,9 +99,11 @@ void sendBrightnessUpdate(const char* entity_id, int brightness);
 volatile bool isBrightnessUpdateInProgress = false;
 
 void setup() {
-    Serial.begin(115200);
-    delay(300); // Give some time for serial to initialize
-    Serial.println("Starting setup...");
+    if (ENABLE_SERIAL_LOGGING) {
+        Serial.begin(115200);
+        delay(300); // Give some time for serial to initialize
+    }
+    SERIAL_PRINTLN("Starting setup...");
     printMemoryUsage();
 
     strip.begin();
@@ -102,22 +111,22 @@ void setup() {
 
     xMutex = xSemaphoreCreateMutex();
     if (xMutex == NULL) {
-        Serial.println("Failed to create mutex");
+        SERIAL_PRINTLN("Failed to create mutex");
         return;
     } else {
-        Serial.println("Mutex created");
+        SERIAL_PRINTLN("Mutex created");
     }
 
     queueMutex = xSemaphoreCreateMutex();
     if (queueMutex == NULL) {
-        Serial.println("Failed to create queue mutex");
+        SERIAL_PRINTLN("Failed to create queue mutex");
         return;
     }
 
     showConnectingAnimation();
 
     if (connectToWiFi(10000)) {
-        Serial.println("\nConnected to WiFi");
+        SERIAL_PRINTLN("\nConnected to WiFi");
         showWiFiConnectedAnimation();
 
         webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
@@ -126,7 +135,7 @@ void setup() {
 
         initializeEntityStates();
     } else {
-        Serial.println("\nFailed to connect to WiFi");
+        SERIAL_PRINTLN("\nFailed to connect to WiFi");
         showConnectionFailedAnimation();
     }
 
@@ -142,7 +151,7 @@ void setup() {
     esp_task_wdt_init(30, true); // 30 second timeout, panic on timeout
     esp_task_wdt_add(NULL); // Add current thread to WDT watch
 
-    Serial.println("Setup complete.");
+    SERIAL_PRINTLN("Setup complete.");
     printMemoryUsage();
 }
 
@@ -161,19 +170,19 @@ void loop() {
     webSocket.loop();
 
     if (millis() - lastMessageProcess > 100) {  // Process messages every 100ms
-        // Serial.println("Starting to process queued messages");
+        // SERIAL_PRINTLN("Starting to process queued messages");
         if (!isBrightnessUpdateInProgress) {
             processQueuedMessages();
         } else {
-            Serial.println("Skipping message processing due to brightness update in progress");
+            SERIAL_PRINTLN("Skipping message processing due to brightness update in progress");
             // Add a timeout for brightness update
             if (millis() - brightnessUpdateStartTime > BRIGHTNESS_UPDATE_TIMEOUT_MS) {  
-                Serial.println("Brightness update timeout reached, resetting flag");
+                SERIAL_PRINTLN("Brightness update timeout reached, resetting flag");
                 isBrightnessUpdateInProgress = false;
             }
         }
         lastMessageProcess = millis();
-        // Serial.println("Finished processing queued messages");
+        // SERIAL_PRINTLN("Finished processing queued messages");
     }
 
     if (isBrightnessUpdateInProgress && brightnessUpdateStartTime == 0) {
@@ -213,7 +222,7 @@ int getLedIndex(int x, int y) {
 }
 
 void updateLED(int x, int y, const JsonObject& state) {
-    Serial.printf("Updating LED at (%d, %d)\n", x, y);
+    SERIAL_PRINTF("Updating LED at (%d, %d)\n", x, y);
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
         EntityState& currentState = entityStates[y][x];
 
@@ -264,7 +273,7 @@ void updateLED(int x, int y, const JsonObject& state) {
 
         xSemaphoreGive(xMutex);
 
-        Serial.printf("Updated LED at (%d, %d): R=%d, G=%d, B=%d, Brightness=%d, Scaled Brightness=%d, Is On=%d\n",
+        SERIAL_PRINTF("Updated LED at (%d, %d): R=%d, G=%d, B=%d, Brightness=%d, Scaled Brightness=%d, Is On=%d\n",
                       x, y, currentState.r, currentState.g, currentState.b, currentState.brightness,
                       (int)(currentState.brightness * scaleFactor), currentState.is_on);
     }
@@ -307,41 +316,41 @@ void subscribeToEntities() {
 }
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-    Serial.printf("WebSocket event type: %d\n", type);
+    SERIAL_PRINTF("WebSocket event type: %d\n", type);
     
     switch(type) {
         case WStype_DISCONNECTED:
-            Serial.println("WebSocket disconnected");
+            SERIAL_PRINTLN("WebSocket disconnected");
             showWebSocketConnectionFailedAnimation();
             break;
         case WStype_CONNECTED:
-            Serial.println("WebSocket connected");
+            SERIAL_PRINTLN("WebSocket connected");
             showWebSocketConnectedAnimation();
             webSocket.sendTXT("{\"type\": \"auth\", \"access_token\": \"" + String(HA_API_PASSWORD) + "\"}");
             break;
         case WStype_TEXT:
             {
-                Serial.println("Entering WStype_TEXT case");
+                SERIAL_PRINTLN("Entering WStype_TEXT case");
                 if (isBrightnessUpdateInProgress) {
                     queueWebSocketMessage(payload, length);
                     return;
                 }
 
-                Serial.printf("Received WebSocket text message. Length: %d\n", length);
+                SERIAL_PRINTF("Received WebSocket text message. Length: %d\n", length);
                 DynamicJsonDocument doc(JSON_BUFFER_SIZE);
                 DeserializationError error = deserializeJson(doc, payload, DeserializationOption::NestingLimit(10));
                 
                 if (error) {
-                    Serial.printf("deserializeJson() failed: %s\n", error.c_str());
-                    Serial.printf("Payload: %.*s\n", length, payload);
+                    SERIAL_PRINTF("deserializeJson() failed: %s\n", error.c_str());
+                    SERIAL_PRINTF("Payload: %.*s\n", length, payload);
                     return;
                 }
 
                 if (doc["type"] == "auth_ok") {
-                    Serial.println("Authentication successful");
+                    SERIAL_PRINTLN("Authentication successful");
                     subscribeToEntities();
                 } else if (doc["type"] == "event") {
-                    Serial.println("Received event type message");
+                    SERIAL_PRINTLN("Received event type message");
                     JsonObject event = doc["event"];
                     if (event.containsKey("a")) {
                         JsonObject entities = event["a"];
@@ -381,12 +390,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                         }
                     }
                 }
-                Serial.println("Exiting WStype_TEXT case");
+                SERIAL_PRINTLN("Exiting WStype_TEXT case");
             }
             break;
         case WStype_BIN:
         case WStype_ERROR:
-            Serial.println("WebSocket error occurred");
+            SERIAL_PRINTLN("WebSocket error occurred");
             break;
         case WStype_FRAGMENT_TEXT_START:
         case WStype_FRAGMENT_BIN_START:
@@ -394,7 +403,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         case WStype_FRAGMENT_FIN:
             break;
         default:
-            Serial.printf("Unhandled WebSocket event type: %d\n", type);
+            SERIAL_PRINTF("Unhandled WebSocket event type: %d\n", type);
             break;
     }
 }
@@ -413,15 +422,15 @@ void toggleEntity(int x, int y) {
             serializeJson(doc, message);
             webSocket.sendTXT(message);
 
-            Serial.printf("Toggling entity at (%d, %d): %s\n", x, y, entityMappings[i].entity_id);
+            SERIAL_PRINTF("Toggling entity at (%d, %d): %s\n", x, y, entityMappings[i].entity_id);
             return;
         }
     }
-    Serial.printf("No entity found at (%d, %d) to toggle\n", x, y);
+    SERIAL_PRINTF("No entity found at (%d, %d) to toggle\n", x, y);
 }
 
 void buttonCheckTask(void * parameter) {
-    Serial.println("Button check task started");
+    SERIAL_PRINTLN("Button check task started");
     printMemoryUsage();
 
     TickType_t xLastWakeTime;
@@ -466,7 +475,7 @@ void buttonCheckTask(void * parameter) {
                                 if (pressDuration < LONG_PRESS_TIME && !upButtonPressed && !downButtonPressed) {
                                     toggleEntity(x, y);
                                 } else {
-                                    Serial.printf("Long press detected at (x: %d, y: %d)\n", x, y);
+                                    SERIAL_PRINTF("Long press detected at (x: %d, y: %d)\n", x, y);
                                 }
                             }
                         }
@@ -481,13 +490,13 @@ void buttonCheckTask(void * parameter) {
         }
 
         if ((upButtonPressed || downButtonPressed) && (millis() - lastBrightnessAdjustTime > BRIGHTNESS_ADJUST_INTERVAL)) {
-            Serial.println("Entering brightness adjustment block");
+            SERIAL_PRINTLN("Entering brightness adjustment block");
             isBrightnessUpdateInProgress = true;
             bool timeoutReached = false;
             for (int y = 0; y < ROWS; y++) {
                 for (int x = 0; x < COLS; x++) {
                     if (buttonState[y][x] && !(x == UP_BUTTON_X && y == UP_BUTTON_Y) && !(x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y)) {
-                        Serial.printf("Calling adjustBrightness for button at (%d, %d)\n", x, y);
+                        SERIAL_PRINTF("Calling adjustBrightness for button at (%d, %d)\n", x, y);
                         timeoutReached = adjustBrightness(x, y, upButtonPressed);
                         if (timeoutReached) {
                             break;
@@ -506,13 +515,13 @@ void buttonCheckTask(void * parameter) {
                 isBrightnessAdjustmentMode = false;
                 restoreStates();
             }
-            Serial.println("Exiting brightness adjustment block");
+            SERIAL_PRINTLN("Exiting brightness adjustment block");
         } else if (!upButtonPressed && !downButtonPressed && isBrightnessAdjustmentMode) {
-            Serial.println("Finalizing brightness adjustment");
+            SERIAL_PRINTLN("Finalizing brightness adjustment");
             isBrightnessUpdateInProgress = true;
             for (int i = 0; i < NUM_MAPPINGS; i++) {
                 if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
-                    Serial.printf("Sending final brightness update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
+                    SERIAL_PRINTF("Sending final brightness update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
                     sendBrightnessUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
                     entityStates[lastAdjustedY][lastAdjustedX].brightness = currentAdjustmentBrightness;
                     break;
@@ -521,12 +530,12 @@ void buttonCheckTask(void * parameter) {
             isBrightnessAdjustmentMode = false;
             isBrightnessUpdateInProgress = false;
             restoreStates();
-            Serial.println("Brightness adjustment finalized");
+            SERIAL_PRINTLN("Brightness adjustment finalized");
         }
 
         static unsigned long lastTaskMemoryPrint = 0;
         if (millis() - lastTaskMemoryPrint > 30000) {  // Print task memory usage every 30 seconds
-            Serial.println("Button check task running");
+            SERIAL_PRINTLN("Button check task running");
             printMemoryUsage();
             lastTaskMemoryPrint = millis();
         }
@@ -537,15 +546,15 @@ void buttonCheckTask(void * parameter) {
 }
 
 bool adjustBrightness(int x, int y, bool increase) {
-    Serial.printf("Entering adjustBrightness: x=%d, y=%d, increase=%d\n", x, y, increase);
+    SERIAL_PRINTF("Entering adjustBrightness: x=%d, y=%d, increase=%d\n", x, y, increase);
     bool timeoutReached = false;
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-        Serial.println("Mutex acquired in adjustBrightness");
+        SERIAL_PRINTLN("Mutex acquired in adjustBrightness");
         for (int i = 0; i < NUM_MAPPINGS; i++) {
             if (entityMappings[i].x == x && entityMappings[i].y == y && !entityMappings[i].is_switch) {
-                Serial.printf("Found matching entity mapping at index %d\n", i);
+                SERIAL_PRINTF("Found matching entity mapping at index %d\n", i);
                 if (!isBrightnessAdjustmentMode) {
-                    Serial.println("Entering brightness adjustment mode");
+                    SERIAL_PRINTLN("Entering brightness adjustment mode");
                     isBrightnessAdjustmentMode = true;
                     saveCurrentStates();
                     currentAdjustmentBrightness = entityStates[y][x].brightness;
@@ -559,7 +568,7 @@ bool adjustBrightness(int x, int y, bool increase) {
                 } else {
                     currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_STEP);
                 }
-                Serial.printf("Adjusted brightness to %d\n", currentAdjustmentBrightness);
+                SERIAL_PRINTF("Adjusted brightness to %d\n", currentAdjustmentBrightness);
 
                 // Pass the color information to displayBrightnessLevel
                 displayBrightnessLevel(currentAdjustmentBrightness, 
@@ -568,7 +577,7 @@ bool adjustBrightness(int x, int y, bool increase) {
                                        entityStates[y][x].b);
 
                 if (millis() - brightnessAdjustmentStartTime > BRIGHTNESS_ADJUST_TIMEOUT) {
-                    Serial.println("Brightness adjustment timeout reached");
+                    SERIAL_PRINTLN("Brightness adjustment timeout reached");
                     sendBrightnessUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
                     entityStates[y][x].brightness = currentAdjustmentBrightness;
                     timeoutReached = true;
@@ -578,30 +587,30 @@ bool adjustBrightness(int x, int y, bool increase) {
             }
         }
         xSemaphoreGive(xMutex);
-        Serial.println("Mutex released in adjustBrightness");
+        SERIAL_PRINTLN("Mutex released in adjustBrightness");
     } else {
-        Serial.println("Failed to acquire mutex in adjustBrightness");
+        SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightness");
     }
-    Serial.println("Exiting adjustBrightness");
+    SERIAL_PRINTLN("Exiting adjustBrightness");
     return timeoutReached;
 }
 
 void updateTimeAndCheckNightMode(const char* time_str) {
-    Serial.printf("Received time update: %s\n", time_str);
+    SERIAL_PRINTF("Received time update: %s\n", time_str);
 
     if (!time_str || strlen(time_str) < 5) {
-        Serial.println("Invalid time string received");
+        SERIAL_PRINTLN("Invalid time string received");
         return;
     }
 
     int hour = 0, minute = 0;
     if (sscanf(time_str, "%d:%d", &hour, &minute) != 2) {
-        Serial.printf("Failed to parse time string: %s\n", time_str);
+        SERIAL_PRINTF("Failed to parse time string: %s\n", time_str);
         return;
     }
 
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        Serial.printf("Invalid time values: %02d:%02d\n", hour, minute);
+        SERIAL_PRINTF("Invalid time values: %02d:%02d\n", hour, minute);
         return;
     }
 
@@ -615,19 +624,19 @@ void updateTimeAndCheckNightMode(const char* time_str) {
     }
     if (newIsNightMode != isNightMode) {
         isNightMode = newIsNightMode;
-        Serial.printf("Night mode changed to: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
+        SERIAL_PRINTF("Night mode changed to: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
         for (int y = 0; y < ROWS; y++) {
             for (int x = 0; x < COLS; x++) {
                 updateLED(x, y);
             }
         }
     } else {
-        Serial.printf("Night mode unchanged: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
+        SERIAL_PRINTF("Night mode unchanged: %s (Time: %02d:%02d)\n", isNightMode ? "ON" : "OFF", hour, minute);
     }
 }
 
 void showConnectingAnimation() {
-    Serial.println("Showing connecting animation (Blue)");
+    SERIAL_PRINTLN("Showing connecting animation (Blue)");
     for (int i = 0; i < NUM_LEDS; i++) {
         strip.setPixelColor(i, applyBrightnessScalar(COLOR_BLUE));
         strip.show();
@@ -638,7 +647,7 @@ void showConnectingAnimation() {
 }
 
 void showWiFiConnectedAnimation() {
-    Serial.println("Showing WiFi connected animation (Green)");
+    SERIAL_PRINTLN("Showing WiFi connected animation (Green)");
     for (int i = 0; i < ANIMATION_REPEAT_COUNT; i++) {
         for (int j = 0; j < NUM_LEDS; j++) {
             strip.setPixelColor(j, applyBrightnessScalar(COLOR_GREEN));
@@ -652,7 +661,7 @@ void showWiFiConnectedAnimation() {
 }
 
 void showWebSocketConnectedAnimation() {
-    Serial.println("Showing WebSocket connected animation (Cyan and Yellow)");
+    SERIAL_PRINTLN("Showing WebSocket connected animation (Cyan and Yellow)");
     for (int i = 0; i < ANIMATION_REPEAT_COUNT; i++) {
         for (int j = 0; j < NUM_LEDS; j++) {
             strip.setPixelColor(j, applyBrightnessScalar(j % 2 == 0 ? COLOR_CYAN : COLOR_YELLOW));
@@ -666,7 +675,7 @@ void showWebSocketConnectedAnimation() {
 }
 
 void showConnectionFailedAnimation() {
-    Serial.println("Showing connection failed animation (Red)");
+    SERIAL_PRINTLN("Showing connection failed animation (Red)");
     strip.clear();
     for (int j = 0; j < NUM_LEDS; j++) {
         strip.setPixelColor(j, applyBrightnessScalar(COLOR_RED));
@@ -675,7 +684,7 @@ void showConnectionFailedAnimation() {
 }
 
 void showWebSocketConnectionFailedAnimation() {
-    Serial.println("Showing WebSocket connection failed animation (Red and Orange)");
+    SERIAL_PRINTLN("Showing WebSocket connection failed animation (Red and Orange)");
     strip.clear();
     for (int j = 0; j < NUM_LEDS; j++) {
         strip.setPixelColor(j, applyBrightnessScalar(j % 2 == 0 ? COLOR_RED : COLOR_ORANGE));
@@ -738,11 +747,11 @@ void sendBrightnessUpdate(const char* entity_id, int brightness) {
     serializeJson(doc, message);
     webSocket.sendTXT(message);
 
-    Serial.printf("Adjusting brightness for %s to %d\n", entity_id, brightness);
+    SERIAL_PRINTF("Adjusting brightness for %s to %d\n", entity_id, brightness);
 }
 
 void printMemoryUsage() {
-    Serial.printf("Free heap: %d, Largest free block: %d\n", 
+    SERIAL_PRINTF("Free heap: %d, Largest free block: %d\n", 
                   esp_get_free_heap_size(), 
                   heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 }
@@ -756,12 +765,12 @@ void queueWebSocketMessage(uint8_t* payload, size_t length) {
                 queuedMessages[queuedMessageCount].payload[length] = '\0';
                 queuedMessages[queuedMessageCount].length = length;
                 queuedMessageCount++;
-                Serial.printf("Queued message. Count: %d, Length: %d\n", queuedMessageCount, length);
+                SERIAL_PRINTF("Queued message. Count: %d, Length: %d\n", queuedMessageCount, length);
             } else {
-                Serial.println("Failed to allocate memory for queued message");
+                SERIAL_PRINTLN("Failed to allocate memory for queued message");
             }
         } else {
-            Serial.println("Message queue is full, dropping message");
+            SERIAL_PRINTLN("Message queue is full, dropping message");
         }
         xSemaphoreGive(queueMutex);
     }
@@ -771,15 +780,15 @@ void processQueuedMessages() {
     if (xSemaphoreTake(queueMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         int processedCount = 0;
         unsigned long startTime = millis();
-        while (queuedMessageCount > 0 && processedCount < 5 && (millis() - startTime) < 500) {  // Process up to 5 messages or for 500ms max
+        while (queuedMessageCount > 0 && processedCount < 5 && (millis() - startTime) < 1000) {  // Process up to 5 messages or for 500ms max
             queuedMessageCount--;
             webSocketEvent(WStype_TEXT, (uint8_t*)queuedMessages[queuedMessageCount].payload, queuedMessages[queuedMessageCount].length);
             free(queuedMessages[queuedMessageCount].payload);
             processedCount++;
-            Serial.printf("Processed %d queued messages. Remaining: %d\n", processedCount, queuedMessageCount);
+            SERIAL_PRINTF("Processed %d queued messages. Remaining: %d\n", processedCount, queuedMessageCount);
         }
         xSemaphoreGive(queueMutex);
     } else {
-        Serial.println("Failed to acquire queue mutex in processQueuedMessages");
+        SERIAL_PRINTLN("Failed to acquire queue mutex in processQueuedMessages");
     }
 }
