@@ -11,8 +11,8 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 - Support for toggling `switch`,`light`,`cover` and `script` entities with a single press
 - Support for calling media_player.media_play_pause service for `media_player` entities
 - State and brightness tracking for lights
-- Brightness control with special up and down buttons (lights only)
-    - press this with any light to set the brightness, keep pressed to increase/decrease
+- Brightness/Volume control with special up and down buttons (lights / media_player)
+    - press this with any light/media player to set the brightness/volume, keep pressed to increase/decrease
 ![Brightness Control](images/brightness.gif)
 - Child Lock Mode (Holding 0,0 + 5,0 for 1 seconds enables child lock mode (Purple LEDs), same actions for disabling (White LEDs)
     - Both buttons + time for child lock mode can be configured in config.h

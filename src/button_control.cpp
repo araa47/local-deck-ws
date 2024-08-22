@@ -168,7 +168,8 @@ void buttonCheckTask(void * parameter) {
 bool adjustBrightnessOrVolume(int x, int y, bool increase) {
     SERIAL_PRINTF("Entering adjustBrightnessOrVolume: x=%d, y=%d, increase=%d\n", x, y, increase);
     static unsigned long lastAdjustmentTime = 0;
-    const unsigned long ADJUSTMENT_INTERVAL = 50; // Adjust every 50ms for smoother transitions
+    const unsigned long ADJUSTMENT_INTERVAL = 50; // 20ms for both brightness and volume
+    const int ADJUSTMENT_STEP = 5; // Small step for smooth adjustments
 
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
         SERIAL_PRINTLN("Mutex acquired in adjustBrightnessOrVolume");
@@ -186,12 +187,13 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
                     lastAdjustedY = y;
                 }
 
-                // Only adjust if enough time has passed since the last adjustment
-                if (millis() - lastAdjustmentTime >= ADJUSTMENT_INTERVAL) {
+                unsigned long currentTime = millis();
+
+                if (currentTime - lastAdjustmentTime >= ADJUSTMENT_INTERVAL) {
                     if (increase) {
-                        currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_STEP);
+                        currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + ADJUSTMENT_STEP);
                     } else {
-                        currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_STEP);
+                        currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - ADJUSTMENT_STEP);
                     }
                     SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
 
@@ -202,13 +204,15 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
                         entityStates[y][x].brightness = currentAdjustmentBrightness;
                     }
 
-                    // Pass the color information to displayBrightnessLevel
                     displayBrightnessLevel(currentAdjustmentBrightness, 
                                            entityStates[y][x].r, 
                                            entityStates[y][x].g, 
                                            entityStates[y][x].b);
 
-                    lastAdjustmentTime = millis();
+                    lastAdjustmentTime = currentTime;
+
+                    // Add a small delay after each adjustment
+                    delay(1);
                 }
 
                 xSemaphoreGive(xMutex);
