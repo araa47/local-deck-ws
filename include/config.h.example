@@ -46,7 +46,9 @@ struct EntityMapping {
     uint8_t default_brightness;
 };
 
-// If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness!
+// default colors and brightness are ignored if the light has different colors/brightness 
+// default colors and brightness are useful for other entities (media_player,scripts,switch)
+
 const EntityMapping entityMappings[] = {
 
     //  (1st Column )
