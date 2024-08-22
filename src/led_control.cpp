@@ -32,12 +32,11 @@ void updateLED(int x, int y, const JsonObject& state) {
                     }
                     if (attributes.containsKey("brightness")) {
                         currentState.brightness = attributes["brightness"];
+                    } else if (attributes.containsKey("volume_level")) {
+                        currentState.volume = attributes["volume_level"];
+                        currentState.brightness = currentState.volume * 255;
                     } else {
                         currentState.brightness = 255; // Default to full brightness if not specified
-                    }
-                    if (attributes.containsKey("volume_level")) {
-                        currentState.volume = attributes["volume_level"];
-                        SERIAL_PRINTF("Updated volume to %.2f\n", currentState.volume);
                     }
                 } else {
                     currentState.brightness = 0;
