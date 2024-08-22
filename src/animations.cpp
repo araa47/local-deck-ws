@@ -74,7 +74,7 @@ void showChildLockEnabledAnimation() {
 void showChildLockDisabledAnimation() {
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < strip.numPixels(); j++) {
-            strip.setPixelColor(j, applyBrightnessScalar(COLOR_WHITE)); // Green color
+            strip.setPixelColor(j, applyBrightnessScalar(COLOR_WHITE));
         }
         strip.show();
         delay(200);
