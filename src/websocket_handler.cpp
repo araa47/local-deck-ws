@@ -28,8 +28,10 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                     queueWebSocketMessage(payload, length);
                     return;
                 }
-
                 SERIAL_PRINTF("Received WebSocket text message. Length: %d\n", length);
+                SERIAL_PRINT("Message content: ");
+                SERIAL_PRINTLN((char*)payload);  // Add this line to log the message content
+
                 DynamicJsonDocument doc(JSON_BUFFER_SIZE);
                 DeserializationError error = deserializeJson(doc, payload, DeserializationOption::NestingLimit(10));
                 
@@ -159,18 +161,26 @@ void processQueuedMessages() {
 }
 
 
-void sendBrightnessUpdate(const char* entity_id, int brightness) {
+void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_media_player) {
     DynamicJsonDocument doc(1024);
     doc["id"] = messageId++;
     doc["type"] = "call_service";
-    doc["domain"] = "light";
-    doc["service"] = "turn_on";
-    doc["target"]["entity_id"] = entity_id;
-    doc["service_data"]["brightness"] = brightness;
+    
+    if (is_media_player) {
+        doc["domain"] = "media_player";
+        doc["service"] = "volume_set";
+        doc["target"]["entity_id"] = entity_id;
+        doc["service_data"]["volume_level"] = value / 255.0f;
+        SERIAL_PRINTF("Adjusting volume for %s to %.2f\n", entity_id, value / 255.0f);
+    } else {
+        doc["domain"] = "light";
+        doc["service"] = "turn_on";
+        doc["target"]["entity_id"] = entity_id;
+        doc["service_data"]["brightness"] = value;
+        SERIAL_PRINTF("Adjusting brightness for %s to %d\n", entity_id, value);
+    }
 
     String message;
     serializeJson(doc, message);
     webSocket.sendTXT(message);
-
-    SERIAL_PRINTF("Adjusting brightness for %s to %d\n", entity_id, brightness);
 }

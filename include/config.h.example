@@ -12,26 +12,25 @@
 
 // Night mode configuration
 #define NIGHT_START_HOUR 22  // 10 PM
-#define NIGHT_END_HOUR 8     // 8 AM
-#define NIGHT_BRIGHTNESS_SCALE 0.1f
+#define NIGHT_END_HOUR 9     // 8 AM
+#define NIGHT_BRIGHTNESS_SCALE 0.03f
 
-
-// Special Up button for brightness control (coordinates 2,0)
+// Special Up button for brightness control
 #define UP_BUTTON_X 2
 #define UP_BUTTON_Y 0
-// Special Down button for brightness control (coordinates 1,0)
+// Special Down button for brightness control 
 #define DOWN_BUTTON_X 1
 #define DOWN_BUTTON_Y 0
 
-
+// Brightness Control 
 #define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
 const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
-
+#define BRIGHTNESS_ADJUST_TIMEOUT 2000 // 2 seconds
 // Constants for animations
 const int ANIMATION_DELAY_SHORT = 50;
 const int ANIMATION_DELAY_MEDIUM = 100;
 const int ANIMATION_REPEAT_COUNT = 3;
-const float ANIMATION_BRIGHTNESS_SCALAR = 0.07f; // Adjust this value to change overall brightness
+const float ANIMATION_BRIGHTNESS_SCALAR = 0.03f; // Adjust this value to change overall brightness
 
 // JSON buffer size
 const size_t JSON_BUFFER_SIZE = 16384; // 16KB Anything less leads to esp to crash when first connecting to WS
@@ -46,47 +45,47 @@ struct EntityMapping {
     uint8_t default_g;
     uint8_t default_b;
     uint8_t default_brightness;
+    bool is_media_player;
 };
 
-// If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness of the entity if exists!
+// If you set is_switch=True, it will simply use the passed color and brightness, if you set to false, will follow light color and brightness!
 const EntityMapping entityMappings[] = {
-    // Column 0 (x = 0)
-    {"light.example_1", 0, 3, false, 255, 255, 255, 255},  // Example light 1 (top left corner)
-    {"light.example_2", 0, 2, false, 255, 255, 255, 255},  // Example light 2
-    {"light.example_3", 0, 1, false, 255, 255, 255, 255},  // Example light 3
-    {"switch.example_1", 0, 0, true, 255, 165, 0, 10},     // Example switch 1 (orange) (bottom left corner)
 
-    // Column 1 (x = 1)
-    {"light.example_4", 1, 3, false, 255, 255, 255, 255},  // Example light 4
-    {"light.example_5", 1, 2, false, 255, 255, 255, 255},  // Example light 5
-    {"light.example_6", 1, 1, false, 255, 255, 255, 255},  // Example light 6
+    //  (1st Column )
+    {"light.example1", 0, 3, false, 255, 255, 255, 255, false},  
+    {"light.example2", 0, 2, false, 255, 255, 255, 255, false}, 
+    {"light.example3", 0, 1, false, 255, 255, 255, 255, false},     
+    {"switch.example1", 0, 0, true, 255, 165, 0, 10, false},  // NOTE: is_switch=True
+
+    {"light.example4", 1, 3, false, 255, 255, 255, 255, false},   
+    {"light.example5", 1, 2, false, 255, 255, 255, 255, false},    
+    {"light.example6", 1, 1, false, 255, 255, 255, 255, false}, 
     // 1,0 is reserved for brightness decrease modifier
 
-    // Column 2 (x = 2)
-    {"light.example_7", 2, 3, true, 255, 154, 0, 10},      // Example light 7
-    {"light.example_8", 2, 2, true, 255, 154, 0, 10},      // Example light 8
-    {"light.example_9", 2, 1, true, 255, 154, 0, 255},     // Example light 9
+    // (3rd Column)
+    {"media_player.example1", 2, 3, true, 0, 255, 0, 255, true},  // NOTE: is_media_player=True
+    {"light.example7", 2, 2, true, 255, 154, 0, 10, false},  
+    {"light.example8", 2, 1, true, 255, 154, 0, 255, false},  
     // 2,0 is reserved for brightness increase modifier
 
-    // Column 3 (x = 3)
-    {"light.example_10", 3, 3, false, 255, 255, 255, 255}, // Example light 10
-    {"script.example_1", 3, 2, false, 255, 255, 255, 255}, // Example script 1
-    {"script.example_2", 3, 1, true, 0, 255, 0, 255},      // Example script 2 (green)
-    {"script.example_3", 3, 0, true, 0, 255, 0, 255},      // Example script 3 (green)
+    // (4th Column)
+    {"switch.example2", 3, 3, true, 0, 0, 255, 255, false},  // NOTE: is_switch=Trueq
+    {"script.example1", 3, 2, false, 255, 255, 255, 255, false}, 
+    {"script.example2", 3, 1, true, 0, 255, 0, 255, false},  
+    {"script.example3", 3, 0, true, 0, 255, 0, 255, false},  
 
-    // Column 4 (x = 4)
-    {"switch.example_2", 4, 3, true, 255, 0, 255, 255},    // Example switch 2 (magenta)
-    {"script.example_4", 4, 2, false, 255, 255, 255, 255}, // Example script 4
-    {"switch.example_3", 4, 1, false, 0, 255, 0, 255},     // Example switch 3 (green)
-    {"switch.example_4", 4, 0, true, 255, 255, 255, 255},  // Example switch 4
+    // (5th Column)
+    {"switch.example3", 4, 3, true, 255, 0, 255, 255, false}, // NOTE: is_switch=True
+    {"script.example4", 4, 2, false, 255, 255, 255, 255, false},  
+    {"media_player.example3", 4, 1, false, 0, 255, 0, 255, true},  // NOTE: is_media_player=True
+    {"script.example5", 4, 0, true, 255, 0, 0, 255, false}, 
 
-    // Column 5 (x = 5)
-    {"switch.example_5", 5, 3, true, 255, 0, 255, 20},     // Example switch 5 (magenta) (top right corner)
-    {"switch.example_6", 5, 2, true, 0, 255, 255, 10},     // Example switch 6 (cyan)
-    {"switch.example_7", 5, 1, true, 0, 255, 255, 10},     // Example switch 7 (cyan)
-    {"switch.example_8", 5, 0, true, 255, 255, 255, 255},  // Example switch 8 (bottom right corner)
+    // (6th Column)
+    {"switch.example6", 5, 3, true, 255, 0, 255, 20, false},  // NOTE: is_switch=True
+    {"switch.example7", 5, 2, true, 0, 255, 255, 10, false},  // NOTE: is_switch=True
+    {"switch.example8", 5, 1, true, 0, 255, 255, 10, false},  // NOTE: is_switch=True
+    {"script.example9", 5, 0, true, 0, 255, 0, 255, false},  // NOTE: is_switch=True
 };
-
 
 const int NUM_MAPPINGS = sizeof(entityMappings) / sizeof(entityMappings[0]);
 

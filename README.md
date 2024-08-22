@@ -9,9 +9,10 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 
 - Direct connection to Home Assistant over websocket
 - Support for toggling `switch`,`light`,`cover` and `script` entities with a single press
+- Support for calling media_player.media_play_pause service for `media_player` entities
 - State and brightness tracking for lights
-- Brightness control with special up and down buttons (lights only)
-    - press this with any light to set the brightness, keep pressed to increase/decrease
+- Brightness/Volume control with special up and down buttons (lights / media_player)
+    - press this with any light/media player to set the brightness/volume, keep pressed to increase/decrease
 ![Brightness Control](images/brightness.gif)
 - Child Lock Mode (Holding 0,0 + 5,0 for 1 seconds enables child lock mode (Purple LEDs), same actions for disabling (White LEDs)
     - Both buttons + time for child lock mode can be configured in config.h
@@ -87,6 +88,8 @@ After flashing the firmware and powering on the LocalDeck, it will attempt to co
 
 ## Troubleshooting
 
+- If you added a media_player make sure to set `is_media_player` to true in the entity mappings, if you don't play/pause might not work ! 
+- Spotify may not work great for volume control, I think home assistant seems to get rate limited or something so its not as reliable as it should be. Controlling the volume of your media player directly is better if possible. 
 - Make sure `ENABLE_SERIAL_LOGGING` is disabled in [common.h](common.h) if not monitoring via serial! It somehow causes the device to hang when serial buffer is not being consumed!
 - If the device shows a connection failure, check your Wi-Fi credentials and Home Assistant configuration in `secrets.h`.
 - Ensure your Home Assistant instance is reachable from the network the LocalDeck is connected to.

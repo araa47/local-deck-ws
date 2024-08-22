@@ -10,6 +10,8 @@ struct EntityState {
     uint8_t r, g, b;
     uint8_t brightness;
     int x, y;
+    bool is_playing;
+    float volume;
 };
 
 extern EntityState entityStates[ROWS][COLS];

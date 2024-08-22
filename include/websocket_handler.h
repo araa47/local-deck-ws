@@ -19,6 +19,5 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 void subscribeToEntities();
 void queueWebSocketMessage(uint8_t* payload, size_t length);
 void processQueuedMessages();
-void sendBrightnessUpdate(const char* entity_id, int brightness);
-
+void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_media_player);
 #endif // WEBSOCKET_HANDLER_H
