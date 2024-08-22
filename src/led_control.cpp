@@ -15,12 +15,12 @@ void updateLED(int x, int y, const JsonObject& state) {
 
         if (!state.isNull()) {
             if (state.containsKey("s")) {
-                currentState.is_on = (state["s"] == "on");
+                currentState.is_on = (state["s"] == "on" || state["s"] == "playing");
             }
 
             JsonObject attributes = state["a"];
             if (attributes.isNull()) {
-                // If attributes are null, this might be a switch. Update only the on/off state.
+                // If attributes are null, this might be a switch or media player. Update only the on/off state.
                 currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
                 if (currentState.is_on) {

@@ -73,8 +73,15 @@ void toggleEntity(int x, int y) {
             DynamicJsonDocument doc(1024);
             doc["id"] = messageId++;
             doc["type"] = "call_service";
-            doc["domain"] = "homeassistant";
-            doc["service"] = "toggle";
+            
+            if (entityMappings[i].is_media_player) {
+                doc["domain"] = "media_player";
+                doc["service"] = "media_play_pause";
+            } else {
+                doc["domain"] = "homeassistant";
+                doc["service"] = "toggle";
+            }
+            
             doc["target"]["entity_id"] = entityMappings[i].entity_id;
 
             String message;
