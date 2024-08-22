@@ -28,8 +28,10 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
                     queueWebSocketMessage(payload, length);
                     return;
                 }
-
                 SERIAL_PRINTF("Received WebSocket text message. Length: %d\n", length);
+                SERIAL_PRINT("Message content: ");
+                SERIAL_PRINTLN((char*)payload);  // Add this line to log the message content
+
                 DynamicJsonDocument doc(JSON_BUFFER_SIZE);
                 DeserializationError error = deserializeJson(doc, payload, DeserializationOption::NestingLimit(10));
                 
