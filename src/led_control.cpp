@@ -35,6 +35,10 @@ void updateLED(int x, int y, const JsonObject& state) {
                     } else {
                         currentState.brightness = 255; // Default to full brightness if not specified
                     }
+                    if (attributes.containsKey("volume_level")) {
+                        currentState.volume = attributes["volume_level"];
+                        SERIAL_PRINTF("Updated volume to %.2f\n", currentState.volume);
+                    }
                 } else {
                     currentState.brightness = 0;
                 }
@@ -66,10 +70,21 @@ void updateLED(int x, int y, const JsonObject& state) {
     }
 }
 
-
 void displayBrightnessLevel(int brightness, uint8_t r, uint8_t g, uint8_t b) {
+    int numLEDs = (brightness * NUM_LEDS) / 255;
+    for (int i = 0; i < NUM_LEDS; i++) {
+        if (i < numLEDs) {
+            strip.setPixelColor(i, strip.Color(r, g, b));
+        } else {
+            strip.setPixelColor(i, strip.Color(0, 0, 0));
+        }
+    }
+    strip.show();
+}
+
+void displayAdjustmentLevel(int level, uint8_t r, uint8_t g, uint8_t b) {
     float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
-    int litLEDs = map(brightness, 0, 255, 0, NUM_LEDS);
+    int litLEDs = map(level, 0, 255, 0, NUM_LEDS);
     
     for (int i = 0; i < NUM_LEDS; i++) {
         if (i < litLEDs) {

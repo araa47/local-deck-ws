@@ -5,6 +5,7 @@
 #include <esp_task_wdt.h>
 #include "animations.h"
 #include "config.h"
+#include "websocket_handler.h"
 
 // Add these global variables at the top of the file
 extern bool isChildLockMode;
@@ -98,8 +99,8 @@ void buttonCheckTask(void * parameter) {
                 for (int y = 0; y < ROWS; y++) {
                     for (int x = 0; x < COLS; x++) {
                         if (buttonState[y][x] && !(x == UP_BUTTON_X && y == UP_BUTTON_Y) && !(x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y)) {
-                            SERIAL_PRINTF("Calling adjustBrightness for button at (%d, %d)\n", x, y);
-                            adjustBrightness(x, y, upButtonPressed);
+                            SERIAL_PRINTF("Calling adjustBrightnessOrVolume for button at (%d, %d)\n", x, y);
+                            adjustBrightnessOrVolume(x, y, upButtonPressed);
                         }
                     }
                 }
@@ -121,9 +122,12 @@ void buttonCheckTask(void * parameter) {
                 // Finalize the brightness adjustment
                 for (int i = 0; i < NUM_MAPPINGS; i++) {
                     if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
-                        SERIAL_PRINTF("Sending final brightness update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
-                        sendBrightnessUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
-                        entityStates[lastAdjustedY][lastAdjustedX].brightness = currentAdjustmentBrightness;
+                        SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
+                        if (entityMappings[i].is_media_player) {
+                            sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, entityStates[lastAdjustedY][lastAdjustedX].volume * 255, true);
+                        } else {
+                            sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness, false);
+                        }
                         break;
                     }
                 }
@@ -134,9 +138,12 @@ void buttonCheckTask(void * parameter) {
             isBrightnessUpdateInProgress = true;
             for (int i = 0; i < NUM_MAPPINGS; i++) {
                 if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
-                    SERIAL_PRINTF("Sending final brightness update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
-                    sendBrightnessUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
-                    entityStates[lastAdjustedY][lastAdjustedX].brightness = currentAdjustmentBrightness;
+                    SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
+                    if (entityMappings[i].is_media_player) {
+                        sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, entityStates[lastAdjustedY][lastAdjustedX].volume * 255, true);
+                    } else {
+                        sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness, false);
+                    }
                     break;
                 }
             }
@@ -158,34 +165,42 @@ void buttonCheckTask(void * parameter) {
     }
 }
 
-bool adjustBrightness(int x, int y, bool increase) {
-    SERIAL_PRINTF("Entering adjustBrightness: x=%d, y=%d, increase=%d\n", x, y, increase);
+bool adjustBrightnessOrVolume(int x, int y, bool increase) {
+    SERIAL_PRINTF("Entering adjustBrightnessOrVolume: x=%d, y=%d, increase=%d\n", x, y, increase);
     static unsigned long lastAdjustmentTime = 0;
     const unsigned long ADJUSTMENT_INTERVAL = 50; // Adjust every 50ms for smoother transitions
 
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-        SERIAL_PRINTLN("Mutex acquired in adjustBrightness");
+        SERIAL_PRINTLN("Mutex acquired in adjustBrightnessOrVolume");
         for (int i = 0; i < NUM_MAPPINGS; i++) {
-            if (entityMappings[i].x == x && entityMappings[i].y == y && !entityMappings[i].is_switch) {
+            if (entityMappings[i].x == x && entityMappings[i].y == y) {
                 SERIAL_PRINTF("Found matching entity mapping at index %d\n", i);
                 if (!isBrightnessAdjustmentMode) {
-                    SERIAL_PRINTLN("Entering brightness adjustment mode");
+                    SERIAL_PRINTLN("Entering adjustment mode");
                     isBrightnessAdjustmentMode = true;
                     saveCurrentStates();
-                    currentAdjustmentBrightness = entityStates[y][x].brightness;
+                    currentAdjustmentBrightness = entityMappings[i].is_media_player ? 
+                        entityStates[y][x].volume * 255 : entityStates[y][x].brightness;
                     brightnessAdjustmentStartTime = millis();
                     lastAdjustedX = x;
                     lastAdjustedY = y;
                 }
 
-                // Only adjust brightness if enough time has passed since the last adjustment
+                // Only adjust if enough time has passed since the last adjustment
                 if (millis() - lastAdjustmentTime >= ADJUSTMENT_INTERVAL) {
                     if (increase) {
                         currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_STEP);
                     } else {
                         currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_STEP);
                     }
-                    SERIAL_PRINTF("Adjusted brightness to %d\n", currentAdjustmentBrightness);
+                    SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
+
+                    if (entityMappings[i].is_media_player) {
+                        entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
+                        SERIAL_PRINTF("Adjusted volume to %.2f\n", entityStates[y][x].volume);
+                    } else {
+                        entityStates[y][x].brightness = currentAdjustmentBrightness;
+                    }
 
                     // Pass the color information to displayBrightnessLevel
                     displayBrightnessLevel(currentAdjustmentBrightness, 
@@ -196,16 +211,18 @@ bool adjustBrightness(int x, int y, bool increase) {
                     lastAdjustmentTime = millis();
                 }
 
-                break;
+                xSemaphoreGive(xMutex);
+                SERIAL_PRINTLN("Mutex released in adjustBrightnessOrVolume");
+                return true;
             }
         }
         xSemaphoreGive(xMutex);
-        SERIAL_PRINTLN("Mutex released in adjustBrightness");
+        SERIAL_PRINTLN("Mutex released in adjustBrightnessOrVolume");
     } else {
-        SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightness");
+        SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightnessOrVolume");
     }
-    SERIAL_PRINTLN("Exiting adjustBrightness");
-    return false; // We're no longer checking for timeout here
+    SERIAL_PRINTLN("Exiting adjustBrightnessOrVolume");
+    return false;
 }
 
 // Add this new function to update button states
