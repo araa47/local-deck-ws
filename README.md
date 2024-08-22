@@ -14,7 +14,8 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 - Brightness control with special up and down buttons (lights only)
     - press this with any light to set the brightness, keep pressed to increase/decrease
 ![Brightness Control](images/brightness.gif)
-- Child Lock Mode (Holding 0,0 + 5,0 for 3 seconds enables child lock mode (Purple LEDs), same actions for disablin (White LEDs)
+- Child Lock Mode (Holding 0,0 + 5,0 for 1 seconds enables child lock mode (Purple LEDs), same actions for disabling (White LEDs)
+    - Both buttons + time for child lock mode can be configured in config.h
 
 
 - Default color and brightness settings for switches

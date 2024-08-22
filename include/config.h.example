@@ -5,7 +5,7 @@
 #define CHILD_LOCK_BUTTON1_Y 0
 #define CHILD_LOCK_BUTTON2_X 0
 #define CHILD_LOCK_BUTTON2_Y 0
-#define CHILD_LOCK_ACTIVATION_TIME 3000 // 3 seconds
+#define CHILD_LOCK_ACTIVATION_TIME 1000 // 1 second
 
 #define DEBOUNCE_TIME 50 // milliseconds
 #define LONG_PRESS_TIME 1000 // milliseconds
