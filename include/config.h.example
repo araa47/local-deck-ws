@@ -1,6 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// Child Lock Settings 
 #define CHILD_LOCK_BUTTON1_X 5
 #define CHILD_LOCK_BUTTON1_Y 0
 #define CHILD_LOCK_BUTTON2_X 0
@@ -10,9 +11,9 @@
 #define DEBOUNCE_TIME 50 // milliseconds
 #define LONG_PRESS_TIME 1000 // milliseconds
 
-// Night mode configuration
-#define NIGHT_START_HOUR 22  // 10 PM
-#define NIGHT_END_HOUR 9     // 8 AM
+// Night mode configuration 0-24 hour value 
+#define NIGHT_START_HOUR 22  
+#define NIGHT_END_HOUR 9     
 #define NIGHT_BRIGHTNESS_SCALE 0.03f
 
 // Special Up button for brightness control
@@ -26,6 +27,7 @@
 #define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
 const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
 #define BRIGHTNESS_ADJUST_TIMEOUT 2000 // 2 seconds
+
 // Constants for animations
 const int ANIMATION_DELAY_SHORT = 50;
 const int ANIMATION_DELAY_MEDIUM = 100;
