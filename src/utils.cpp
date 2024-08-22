@@ -77,18 +77,28 @@ void toggleEntity(int x, int y) {
             if (entityMappings[i].is_media_player) {
                 doc["domain"] = "media_player";
                 doc["service"] = "media_play_pause";
+                SERIAL_PRINTF("Attempting to play/pause media player: %s\n", entityMappings[i].entity_id);
+
             } else {
                 doc["domain"] = "homeassistant";
                 doc["service"] = "toggle";
+                SERIAL_PRINTF("Attempting to toggle entity: %s\n", entityMappings[i].entity_id);
+
             }
             
             doc["target"]["entity_id"] = entityMappings[i].entity_id;
 
             String message;
             serializeJson(doc, message);
-            webSocket.sendTXT(message);
+            SERIAL_PRINTF("Sending message: %s\n", message.c_str());
 
-            SERIAL_PRINTF("Toggling entity at (%d, %d): %s\n", x, y, entityMappings[i].entity_id);
+            bool sent = webSocket.sendTXT(message);
+            if (sent) {
+                SERIAL_PRINTF("Message sent successfully for entity at (%d, %d): %s\n", x, y, entityMappings[i].entity_id);
+            } else {
+                SERIAL_PRINTF("Failed to send message for entity at (%d, %d): %s\n", x, y, entityMappings[i].entity_id);
+            }
+
             return;
         }
     }
