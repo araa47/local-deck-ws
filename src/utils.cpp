@@ -1,6 +1,6 @@
 #include "utils.h"
 #include "entity_state.h"
-
+#include "config.h"
 
 bool connectToWiFi(unsigned long timeout) {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -74,16 +74,21 @@ void toggleEntity(int x, int y) {
             doc["id"] = messageId++;
             doc["type"] = "call_service";
             
-            if (entityMappings[i].is_media_player) {
+            if (isMediaPlayer(entityMappings[i].entity_id)) {
                 doc["domain"] = "media_player";
                 doc["service"] = "media_play_pause";
                 SERIAL_PRINTF("Attempting to play/pause media player: %s\n", entityMappings[i].entity_id);
-
-            } else {
+            } else if (isLight(entityMappings[i].entity_id)) {
+                doc["domain"] = "light";
+                doc["service"] = "toggle";
+                SERIAL_PRINTF("Attempting to toggle light: %s\n", entityMappings[i].entity_id);
+            } else if (isSwitch(entityMappings[i].entity_id)) {
                 doc["domain"] = "homeassistant";
                 doc["service"] = "toggle";
-                SERIAL_PRINTF("Attempting to toggle entity: %s\n", entityMappings[i].entity_id);
-
+                SERIAL_PRINTF("Attempting to toggle switch: %s\n", entityMappings[i].entity_id);
+            } else {
+                SERIAL_PRINTF("Unknown entity type: %s\n", entityMappings[i].entity_id);
+                return;
             }
             
             doc["target"]["entity_id"] = entityMappings[i].entity_id;

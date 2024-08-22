@@ -123,7 +123,7 @@ void buttonCheckTask(void * parameter) {
                 for (int i = 0; i < NUM_MAPPINGS; i++) {
                     if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
                         SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
-                        if (entityMappings[i].is_media_player) {
+                        if (isMediaPlayer(entityMappings[i].entity_id)) {
                             sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, entityStates[lastAdjustedY][lastAdjustedX].volume * 255, true);
                         } else {
                             sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness, false);
@@ -139,7 +139,7 @@ void buttonCheckTask(void * parameter) {
             for (int i = 0; i < NUM_MAPPINGS; i++) {
                 if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
                     SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
-                    if (entityMappings[i].is_media_player) {
+                    if (isMediaPlayer(entityMappings[i].entity_id)) {
                         sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, entityStates[lastAdjustedY][lastAdjustedX].volume * 255, true);
                     } else {
                         sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness, false);
@@ -176,11 +176,26 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
         for (int i = 0; i < NUM_MAPPINGS; i++) {
             if (entityMappings[i].x == x && entityMappings[i].y == y) {
                 SERIAL_PRINTF("Found matching entity mapping at index %d\n", i);
+                
+                const char* entity_id = entityMappings[i].entity_id;
+                
+                if (isSwitch(entity_id)) {
+                    SERIAL_PRINTLN("Entity is a switch, skipping brightness/volume adjustment");
+                    xSemaphoreGive(xMutex);
+                    return false;
+                }
+
+                if (!isLight(entity_id) && !isMediaPlayer(entity_id)) {
+                    SERIAL_PRINTLN("Entity is neither a light nor a media player, skipping adjustment");
+                    xSemaphoreGive(xMutex);
+                    return false;
+                }
+
                 if (!isBrightnessAdjustmentMode) {
                     SERIAL_PRINTLN("Entering adjustment mode");
                     isBrightnessAdjustmentMode = true;
                     saveCurrentStates();
-                    currentAdjustmentBrightness = entityMappings[i].is_media_player ? 
+                    currentAdjustmentBrightness = isMediaPlayer(entity_id) ? 
                         entityStates[y][x].volume * 255 : entityStates[y][x].brightness;
                     brightnessAdjustmentStartTime = millis();
                     lastAdjustedX = x;
@@ -197,7 +212,7 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
                     }
                     SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
 
-                    if (entityMappings[i].is_media_player) {
+                    if (isMediaPlayer(entity_id)) {
                         entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
                         SERIAL_PRINTF("Adjusted volume to %.2f\n", entityStates[y][x].volume);
                     } else {

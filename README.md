@@ -52,6 +52,7 @@ To configure your entity mappings:
 - The Up and Down buttons in the config use the coordinates 2,0 and 1,0 respectively, and may be changed in the config.h file
 - Note you will need to make sure in EntityMapping you do not set an entity for the Up and Down buttons if you want to use the brightness control
 
+5. Enable sensors.time in Home Assistant
 
 ### Building and Flashing
 
@@ -88,7 +89,6 @@ After flashing the firmware and powering on the LocalDeck, it will attempt to co
 
 ## Troubleshooting
 
-- If you added a media_player make sure to set `is_media_player` to true in the entity mappings, if you don't play/pause might not work ! 
 - Spotify may not work great for volume control, I think home assistant seems to get rate limited or something so its not as reliable as it should be. Controlling the volume of your media player directly is better if possible. 
 - Make sure `ENABLE_SERIAL_LOGGING` is disabled in [common.h](common.h) if not monitoring via serial! It somehow causes the device to hang when serial buffer is not being consumed!
 - If the device shows a connection failure, check your Wi-Fi credentials and Home Assistant configuration in `secrets.h`.
