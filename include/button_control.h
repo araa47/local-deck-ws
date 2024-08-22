@@ -21,5 +21,6 @@ extern int lastAdjustedY;
 void buttonCheckTask(void * parameter);
 bool adjustBrightness(int x, int y, bool increase);
 void updateButtonStates();
+void toggleChildLock();
 
 #endif // BUTTON_CONTROL_H

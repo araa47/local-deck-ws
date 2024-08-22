@@ -57,3 +57,29 @@ void showWebSocketConnectionFailedAnimation() {
     }
     strip.show();
 }
+
+void showChildLockEnabledAnimation() {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < strip.numPixels(); j++) {
+            strip.setPixelColor(j, applyBrightnessScalar(COLOR_PURPLE)); 
+        }
+        strip.show();
+        delay(200);
+        strip.clear();
+        strip.show();
+        delay(200);
+    }
+}
+
+void showChildLockDisabledAnimation() {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < strip.numPixels(); j++) {
+            strip.setPixelColor(j, applyBrightnessScalar(COLOR_WHITE)); // Green color
+        }
+        strip.show();
+        delay(200);
+        strip.clear();
+        strip.show();
+        delay(200);
+    }
+}

@@ -26,6 +26,8 @@ volatile int queuedMessageCount = 0;
 volatile bool isBrightnessUpdateInProgress = false;
 bool isNightMode = false;
 int currentHour = -1;
+bool isChildLockMode = false;
+unsigned long childLockButtonPressTime = 0;
 
 // Button control variables
 unsigned long lastDebounceTime[ROWS][COLS] = {{0}};

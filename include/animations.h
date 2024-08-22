@@ -10,5 +10,6 @@ void showWiFiConnectedAnimation();
 void showWebSocketConnectedAnimation();
 void showConnectionFailedAnimation();
 void showWebSocketConnectionFailedAnimation();
-
+void showChildLockEnabledAnimation();
+void showChildLockDisabledAnimation();
 #endif // ANIMATIONS_H

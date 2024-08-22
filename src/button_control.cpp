@@ -3,7 +3,12 @@
 #include "entity_state.h"
 #include "utils.h"
 #include <esp_task_wdt.h>
+#include "animations.h"
+#include "config.h"
 
+// Add these global variables at the top of the file
+extern bool isChildLockMode;
+extern unsigned long childLockButtonPressTime;
 
 void buttonCheckTask(void * parameter) {
     SERIAL_PRINTLN("Button check task started");
@@ -13,8 +18,25 @@ void buttonCheckTask(void * parameter) {
     const TickType_t xFrequency = pdMS_TO_TICKS(10);
     xLastWakeTime = xTaskGetTickCount();
 
+    bool childLockButtonsPressed = false;
+    unsigned long childLockPressStartTime = 0;
+
     while (true) {
         esp_task_wdt_reset(); // Reset watchdog timer
+
+        // Check for child lock activation/deactivation
+        if (buttonState[CHILD_LOCK_BUTTON1_Y][CHILD_LOCK_BUTTON1_X] &&
+            buttonState[CHILD_LOCK_BUTTON2_Y][CHILD_LOCK_BUTTON2_X]) {
+            if (!childLockButtonsPressed) {
+                childLockButtonsPressed = true;
+                childLockPressStartTime = millis();
+            } else if (millis() - childLockPressStartTime >= CHILD_LOCK_ACTIVATION_TIME) {
+                toggleChildLock();
+                childLockButtonsPressed = false;
+            }
+        } else {
+            childLockButtonsPressed = false;
+        }
 
         for (int y = 0; y < ROWS; y++) {
             pinMode(rowPins[y], OUTPUT);
@@ -34,7 +56,7 @@ void buttonCheckTask(void * parameter) {
 
                         if (buttonState[y][x] == true) {
                             buttonPressTime[y][x] = millis();
-                            
+
                             if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
                                 upButtonPressed = true;
                             } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
@@ -48,10 +70,12 @@ void buttonCheckTask(void * parameter) {
                             } else {
                                 unsigned long pressDuration = millis() - buttonPressTime[y][x];
                                 
-                                if (pressDuration < LONG_PRESS_TIME && !upButtonPressed && !downButtonPressed) {
-                                    toggleEntity(x, y);
-                                } else {
-                                    SERIAL_PRINTF("Long press detected at (x: %d, y: %d)\n", x, y);
+                                if (!isChildLockMode || pressDuration >= LONG_PRESS_TIME) {
+                                    if (pressDuration < LONG_PRESS_TIME && !upButtonPressed && !downButtonPressed) {
+                                        toggleEntity(x, y);
+                                    } else {
+                                        SERIAL_PRINTF("Long press detected at (x: %d, y: %d)\n", x, y);
+                                    }
                                 }
                             }
                         }
@@ -134,7 +158,6 @@ void buttonCheckTask(void * parameter) {
     }
 }
 
-
 bool adjustBrightness(int x, int y, bool increase) {
     SERIAL_PRINTF("Entering adjustBrightness: x=%d, y=%d, increase=%d\n", x, y, increase);
     static unsigned long lastAdjustmentTime = 0;
@@ -185,7 +208,6 @@ bool adjustBrightness(int x, int y, bool increase) {
     return false; // We're no longer checking for timeout here
 }
 
-
 // Add this new function to update button states
 void updateButtonStates() {
     for (int y = 0; y < ROWS; y++) {
@@ -217,5 +239,22 @@ void updateButtonStates() {
         }
 
         pinMode(rowPins[y], INPUT);
+    }
+}
+
+void toggleChildLock() {
+    isChildLockMode = !isChildLockMode;
+    SERIAL_PRINTF("Child lock mode %s\n", isChildLockMode ? "enabled" : "disabled");
+    if (isChildLockMode) {
+        showChildLockEnabledAnimation();
+    } else {
+        showChildLockDisabledAnimation();
+    }
+    
+    // Show existing entity states after the animation
+    for (int row = 0; row < ROWS; row++) {
+        for (int col = 0; col < COLS; col++) {
+            updateLED(col, row);
+        }
     }
 }

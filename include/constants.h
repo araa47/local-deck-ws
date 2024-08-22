@@ -8,7 +8,8 @@
 #define COLOR_YELLOW  0xFFFF00
 #define COLOR_RED     0xFF0000
 #define COLOR_ORANGE  0xFFA500
-
+#define COLOR_PURPLE  0x800080
+#define COLOR_WHITE   0xFFFFFF
 //LED Config
 #define LED_PIN 8
 #define NUM_LEDS 24
