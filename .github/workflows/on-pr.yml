@@ -11,5 +11,5 @@ on:
       - ready_for_review
 
 jobs:
-  platformio-build:
-    uses: ./.github/workflows/job-platformio-build.yml
+  platformio:
+    uses: ./.github/workflows/job-platformio.yml

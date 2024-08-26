@@ -1,5 +1,5 @@
 ---
-name: PlatformIO Run
+name: PlatformIO
 
 on:
     workflow_call:
