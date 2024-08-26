@@ -1,0 +1,30 @@
+---
+name: PlatformIO
+
+on:
+    workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Taken from : https://docs.platformio.org/en/latest/integration/ci/github-actions.html
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+      - name: Setup Secrets and Config
+        run: |
+          cp include/config.h.example include/config.h
+          cp include/secrets.h.example include/secrets.h
+      - name: Build PlatformIO Project
+        run: pio run

@@ -1,0 +1,11 @@
+---
+name: On Merge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  platformio:
+    uses: ./.github/workflows/job-platformio.yml
+    
