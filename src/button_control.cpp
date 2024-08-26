@@ -171,6 +171,12 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
     const unsigned long ADJUSTMENT_INTERVAL = 50; // 20ms for both brightness and volume
     const int ADJUSTMENT_STEP = 5; // Small step for smooth adjustments
 
+    // Add this check at the beginning of the function
+    if (isChildLockMode) {
+        SERIAL_PRINTLN("Child lock mode active, ignoring brightness/volume adjustment");
+        return false;
+    }
+
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
         SERIAL_PRINTLN("Mutex acquired in adjustBrightnessOrVolume");
         for (int i = 0; i < NUM_MAPPINGS; i++) {
