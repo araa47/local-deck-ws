@@ -16,6 +16,7 @@
 #include "websocket_handler.h"
 #include "animations.h"
 #include "entity_state.h"
+#include "wifi_manager.h"
 #include "utils.h"
 
 // Global variables
@@ -73,11 +74,7 @@ void setup() {
     if (connectToWiFi(10000)) {
         SERIAL_PRINTLN("\nConnected to WiFi");
         showWiFiConnectedAnimation();
-
-        webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
-        webSocket.onEvent(webSocketEvent);
-        webSocket.setReconnectInterval(5000);
-
+        initializeWebSocket();
         initializeEntityStates();
     } else {
         SERIAL_PRINTLN("\nFailed to connect to WiFi");

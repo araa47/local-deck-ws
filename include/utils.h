@@ -9,8 +9,6 @@
 #include "websocket_handler.h"
 #include "led_control.h"
 
-bool connectToWiFi(unsigned long timeout);
-void reconnectWebSocket();
 void printMemoryUsage();
 void updateTimeAndCheckNightMode(const char* time_str);
 void toggleEntity(int x, int y);

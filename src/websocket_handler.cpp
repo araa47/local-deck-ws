@@ -7,6 +7,16 @@
 WebSocketsClient webSocket;
 QueuedMessage queuedMessages[MAX_QUEUED_MESSAGES];
 
+void initializeWebSocket() {
+    webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
+    webSocket.onEvent(webSocketEvent);
+    webSocket.setReconnectInterval(5000);
+}
+
+void reconnectWebSocket() {
+    webSocket.disconnect();
+    webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
+}
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     SERIAL_PRINTF("WebSocket event type: %d\n", type);

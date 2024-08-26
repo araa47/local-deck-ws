@@ -2,23 +2,9 @@
 #include "entity_state.h"
 #include "config.h"
 
-bool connectToWiFi(unsigned long timeout) {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    unsigned long startAttemptTime = millis();
-
-    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
-        delay(100);
-        Serial.print(".");
-    }
-
-    return WiFi.status() == WL_CONNECTED;
-}
 
 
-void reconnectWebSocket() {
-    webSocket.disconnect();
-    webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
-}
+
 
 void printMemoryUsage() {
     SERIAL_PRINTF("Free heap: %d, Largest free block: %d\n", 

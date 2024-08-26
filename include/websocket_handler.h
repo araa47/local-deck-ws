@@ -15,6 +15,8 @@ struct QueuedMessage {
 
 extern QueuedMessage queuedMessages[MAX_QUEUED_MESSAGES];
 
+void initializeWebSocket();
+void reconnectWebSocket();
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 void subscribeToEntities();
 void queueWebSocketMessage(uint8_t* payload, size_t length);
