@@ -1,14 +1,8 @@
 #include "common.h"
-#include <WiFi.h>
-#include <WebSocketsClient.h>
-#include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
-#include <esp_system.h>
-#include <esp_heap_caps.h>
 #include <esp_task_wdt.h>
-#include "secrets.h"
 #include "config.h"
 #include "constants.h"
 #include "led_control.h"

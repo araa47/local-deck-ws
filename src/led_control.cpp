@@ -1,5 +1,4 @@
 #include "led_control.h"
-#include "entity_state.h"
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 

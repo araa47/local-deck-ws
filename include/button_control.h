@@ -4,6 +4,13 @@
 #include "common.h"
 #include "config.h"
 #include "constants.h"
+#include "led_control.h"
+#include "entity_state.h"
+#include "utils.h"
+#include <esp_task_wdt.h>
+#include "animations.h"
+#include "websocket_handler.h"
+
 
 extern unsigned long lastDebounceTime[ROWS][COLS];
 extern bool buttonState[ROWS][COLS];

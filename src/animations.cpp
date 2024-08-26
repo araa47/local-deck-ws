@@ -1,5 +1,4 @@
 #include "animations.h"
-#include "led_control.h"
 
 void showConnectingAnimation() {
     SERIAL_PRINTLN("Showing connecting animation (Blue)");
