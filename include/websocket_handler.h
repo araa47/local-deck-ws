@@ -17,6 +17,8 @@ extern QueuedMessage queuedMessages[MAX_QUEUED_MESSAGES];
 
 void initializeWebSocket();
 void reconnectWebSocket();
+void updateTimeAndCheckNightMode(const char* time_str);
+void toggleEntity(int x, int y);
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 void subscribeToEntities();
 void queueWebSocketMessage(uint8_t* payload, size_t length);
