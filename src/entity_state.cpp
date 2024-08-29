@@ -1,5 +1,4 @@
 #include "entity_state.h"
-#include "led_control.h"
 
 EntityState entityStates[ROWS][COLS];
 EntityState savedStates[ROWS][COLS];

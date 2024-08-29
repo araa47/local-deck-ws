@@ -1,14 +1,8 @@
 #include "common.h"
-#include <WiFi.h>
-#include <WebSocketsClient.h>
-#include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
-#include <esp_system.h>
-#include <esp_heap_caps.h>
 #include <esp_task_wdt.h>
-#include "secrets.h"
 #include "config.h"
 #include "constants.h"
 #include "led_control.h"
@@ -16,6 +10,7 @@
 #include "websocket_handler.h"
 #include "animations.h"
 #include "entity_state.h"
+#include "wifi_manager.h"
 #include "utils.h"
 
 // Global variables
@@ -73,11 +68,7 @@ void setup() {
     if (connectToWiFi(10000)) {
         SERIAL_PRINTLN("\nConnected to WiFi");
         showWiFiConnectedAnimation();
-
-        webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
-        webSocket.onEvent(webSocketEvent);
-        webSocket.setReconnectInterval(5000);
-
+        initializeWebSocket();
         initializeEntityStates();
     } else {
         SERIAL_PRINTLN("\nFailed to connect to WiFi");

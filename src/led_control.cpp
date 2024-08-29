@@ -1,5 +1,4 @@
 #include "led_control.h"
-#include "entity_state.h"
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -70,10 +69,14 @@ void updateLED(int x, int y, const JsonObject& state) {
 }
 
 void displayBrightnessLevel(int brightness, uint8_t r, uint8_t g, uint8_t b) {
+    float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
     int numLEDs = (brightness * NUM_LEDS) / 255;
     for (int i = 0; i < NUM_LEDS; i++) {
         if (i < numLEDs) {
-            strip.setPixelColor(i, strip.Color(r, g, b));
+            uint8_t scaledR = (uint8_t)(r * scaleFactor);
+            uint8_t scaledG = (uint8_t)(g * scaleFactor);
+            uint8_t scaledB = (uint8_t)(b * scaleFactor);
+            strip.setPixelColor(i, strip.Color(scaledR, scaledG, scaledB));
         } else {
             strip.setPixelColor(i, strip.Color(0, 0, 0));
         }

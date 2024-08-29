@@ -1,11 +1,5 @@
 #include "button_control.h"
-#include "led_control.h"
-#include "entity_state.h"
-#include "utils.h"
-#include <esp_task_wdt.h>
-#include "animations.h"
-#include "config.h"
-#include "websocket_handler.h"
+
 
 // Add these global variables at the top of the file
 extern bool isChildLockMode;

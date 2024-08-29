@@ -4,6 +4,7 @@
 #include "common.h"
 #include "config.h"
 #include "constants.h"
+#include "led_control.h"
 
 struct EntityState {       
     bool is_on;

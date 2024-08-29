@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include "constants.h"
 #include "config.h"
+#include "entity_state.h"
 
 extern Adafruit_NeoPixel strip;
 

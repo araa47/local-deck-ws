@@ -1,11 +1,18 @@
 #include "websocket_handler.h"
-#include "led_control.h"
-#include "entity_state.h"
-#include "utils.h"
-#include "animations.h"
 
 WebSocketsClient webSocket;
 QueuedMessage queuedMessages[MAX_QUEUED_MESSAGES];
+
+void initializeWebSocket() {
+    webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
+    webSocket.onEvent(webSocketEvent);
+    webSocket.setReconnectInterval(5000);
+}
+
+void reconnectWebSocket() {
+    webSocket.disconnect();
+    webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
+}
 
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
@@ -22,71 +29,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             webSocket.sendTXT("{\"type\": \"auth\", \"access_token\": \"" + String(HA_API_PASSWORD) + "\"}");
             break;
         case WStype_TEXT:
-            {
-                SERIAL_PRINTLN("Entering WStype_TEXT case");
-                if (isBrightnessUpdateInProgress) {
-                    queueWebSocketMessage(payload, length);
-                    return;
-                }
-                SERIAL_PRINTF("Received WebSocket text message. Length: %d\n", length);
-                SERIAL_PRINT("Message content: ");
-                SERIAL_PRINTLN((char*)payload);  // Add this line to log the message content
-
-                DynamicJsonDocument doc(JSON_BUFFER_SIZE);
-                DeserializationError error = deserializeJson(doc, payload, DeserializationOption::NestingLimit(10));
-                
-                if (error) {
-                    SERIAL_PRINTF("deserializeJson() failed: %s\n", error.c_str());
-                    SERIAL_PRINTF("Payload: %.*s\n", length, payload);
-                    return;
-                }
-
-                if (doc["type"] == "auth_ok") {
-                    SERIAL_PRINTLN("Authentication successful");
-                    subscribeToEntities();
-                } else if (doc["type"] == "event") {
-                    SERIAL_PRINTLN("Received event type message");
-                    JsonObject event = doc["event"];
-                    if (event.containsKey("a")) {
-                        JsonObject entities = event["a"];
-                        for (JsonPair entity : entities) {
-                            const char* entity_id = entity.key().c_str();
-                            if (strcmp(entity_id, "sensor.time") == 0) {
-                                updateTimeAndCheckNightMode(entity.value()["s"]);
-                            } else {
-                                for (int i = 0; i < NUM_MAPPINGS; i++) {
-                                    if (strcmp(entity_id, entityMappings[i].entity_id) == 0) {
-                                        updateLED(entityMappings[i].x, entityMappings[i].y, entity.value().as<JsonObject>());
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    } else if (event.containsKey("c")) {
-                        JsonObject changes = event["c"];
-                        for (JsonPair change : changes) {
-                            const char* entity_id = change.key().c_str();
-                            JsonObject state = change.value();
-                            if (strcmp(entity_id, "sensor.time") == 0) {
-                                if (state.containsKey("+") && state["+"].containsKey("s")) {
-                                    updateTimeAndCheckNightMode(state["+"]["s"]);
-                                }
-                            } else {
-                                if (state.containsKey("+")) {
-                                    state = state["+"];
-                                }
-                                for (int i = 0; i < NUM_MAPPINGS; i++) {
-                                    if (strcmp(entity_id, entityMappings[i].entity_id) == 0) {
-                                        updateLED(entityMappings[i].x, entityMappings[i].y, state);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                SERIAL_PRINTLN("Exiting WStype_TEXT case");
-            }
+            handleHomeAssistantMessage(payload, length);
             break;
         case WStype_BIN:
         case WStype_ERROR:
@@ -101,24 +44,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
             SERIAL_PRINTF("Unhandled WebSocket event type: %d\n", type);
             break;
     }
-}
-
-
-void subscribeToEntities() {
-    DynamicJsonDocument doc(1024);
-    doc["id"] = messageId++;
-    doc["type"] = "subscribe_entities";
-    JsonArray entity_ids = doc.createNestedArray("entity_ids");
-    
-    for (int i = 0; i < NUM_MAPPINGS; i++) {
-        entity_ids.add(entityMappings[i].entity_id);
-    }
-    
-    entity_ids.add("sensor.time");
-    
-    String message;
-    serializeJson(doc, message);
-    webSocket.sendTXT(message);
 }
 
 
@@ -158,29 +83,4 @@ void processQueuedMessages() {
     } else {
         SERIAL_PRINTLN("Failed to acquire queue mutex in processQueuedMessages");
     }
-}
-
-
-void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_media_player) {
-    DynamicJsonDocument doc(1024);
-    doc["id"] = messageId++;
-    doc["type"] = "call_service";
-    
-    if (is_media_player) {
-        doc["domain"] = "media_player";
-        doc["service"] = "volume_set";
-        doc["target"]["entity_id"] = entity_id;
-        doc["service_data"]["volume_level"] = value / 255.0f;
-        SERIAL_PRINTF("Adjusting volume for %s to %.2f\n", entity_id, value / 255.0f);
-    } else {
-        doc["domain"] = "light";
-        doc["service"] = "turn_on";
-        doc["target"]["entity_id"] = entity_id;
-        doc["service_data"]["brightness"] = value;
-        SERIAL_PRINTF("Adjusting brightness for %s to %d\n", entity_id, value);
-    }
-
-    String message;
-    serializeJson(doc, message);
-    webSocket.sendTXT(message);
 }
