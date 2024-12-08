@@ -38,6 +38,10 @@ void updateLED(int x, int y, const JsonObject& state) {
                         currentState.brightness = 255; // Default to full brightness if not specified
                     }
                 } else {
+                    // Store the volume level even when off so that when we start playing, it doesn't start at 0
+                    if (attributes.containsKey("volume_level")) {
+                        currentState.volume = attributes["volume_level"];
+                    }
                     currentState.brightness = 0;
                 }
             }
