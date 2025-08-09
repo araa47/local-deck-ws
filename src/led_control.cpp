@@ -14,7 +14,10 @@ void updateLED(int x, int y, const JsonObject& state) {
 
         if (!state.isNull()) {
             if (state.containsKey("s")) {
-                currentState.is_on = (state["s"] == "on" || state["s"] == "playing");
+                const char* stateValue = state["s"];
+                currentState.is_on = (strcmp(stateValue, "on") == 0 || 
+                                    strcmp(stateValue, "playing") == 0 || 
+                                    strcmp(stateValue, "open") == 0);
             }
 
             JsonObject attributes = state["a"];
