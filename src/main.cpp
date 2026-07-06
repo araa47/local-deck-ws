@@ -84,12 +84,16 @@ void setup() {
         NULL
     );
 
+#if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
     esp_task_wdt_config_t twdt_config = {
         .timeout_ms = 30000,
         .idle_core_mask = 0,
         .trigger_panic = true
     };
     esp_task_wdt_init(&twdt_config); // 30 second timeout, panic on timeout
+#else
+    esp_task_wdt_init(30, true); // 30 second timeout, panic on timeout
+#endif
     esp_task_wdt_add(NULL); // Add current thread to WDT watch
 
     SERIAL_PRINTLN("Setup complete.");
