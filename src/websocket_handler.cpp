@@ -55,7 +55,7 @@ void queueWebSocketMessage(uint8_t* payload, size_t length) {
                 memcpy(queuedMessages[queuedMessageCount].payload, payload, length);
                 queuedMessages[queuedMessageCount].payload[length] = '\0';
                 queuedMessages[queuedMessageCount].length = length;
-                queuedMessageCount++;
+                queuedMessageCount = queuedMessageCount + 1;
                 SERIAL_PRINTF("Queued message. Count: %d, Length: %d\n", queuedMessageCount, length);
             } else {
                 SERIAL_PRINTLN("Failed to allocate memory for queued message");
@@ -73,7 +73,7 @@ void processQueuedMessages() {
         int processedCount = 0;
         unsigned long startTime = millis();
         while (queuedMessageCount > 0 && processedCount < 5 && (millis() - startTime) < 1000) {  // Process up to 5 messages or for 500ms max
-            queuedMessageCount--;
+            queuedMessageCount = queuedMessageCount - 1;
             webSocketEvent(WStype_TEXT, (uint8_t*)queuedMessages[queuedMessageCount].payload, queuedMessages[queuedMessageCount].length);
             free(queuedMessages[queuedMessageCount].payload);
             processedCount++;

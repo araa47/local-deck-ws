@@ -13,7 +13,7 @@ void updateLED(int x, int y, const JsonObject& state) {
         EntityState& currentState = entityStates[y][x];
 
         if (!state.isNull()) {
-            if (state.containsKey("s")) {
+            if (!state["s"].isNull()) {
                 const char* stateValue = state["s"];
                 currentState.is_on = (strcmp(stateValue, "on") == 0 || 
                                     strcmp(stateValue, "playing") == 0 || 
@@ -26,15 +26,15 @@ void updateLED(int x, int y, const JsonObject& state) {
                 currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
                 if (currentState.is_on) {
-                    if (attributes.containsKey("rgb_color")) {
+                    if (!attributes["rgb_color"].isNull()) {
                         JsonArray rgb = attributes["rgb_color"];
                         currentState.r = rgb[0];
                         currentState.g = rgb[1];
                         currentState.b = rgb[2];
                     }
-                    if (attributes.containsKey("brightness")) {
+                    if (!attributes["brightness"].isNull()) {
                         currentState.brightness = attributes["brightness"];
-                    } else if (attributes.containsKey("volume_level")) {
+                    } else if (!attributes["volume_level"].isNull()) {
                         currentState.volume = attributes["volume_level"];
                         currentState.brightness = currentState.volume * 255;
                     } else {
@@ -42,7 +42,7 @@ void updateLED(int x, int y, const JsonObject& state) {
                     }
                 } else {
                     // Store the volume level even when off so that when we start playing, it doesn't start at 0
-                    if (attributes.containsKey("volume_level")) {
+                    if (!attributes["volume_level"].isNull()) {
                         currentState.volume = attributes["volume_level"];
                     }
                     currentState.brightness = 0;

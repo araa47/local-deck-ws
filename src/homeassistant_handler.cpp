@@ -10,7 +10,7 @@ void handleHomeAssistantMessage(uint8_t* payload, size_t length) {
     SERIAL_PRINT("Message content: ");
     SERIAL_PRINTLN((char*)payload);
 
-    DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload, DeserializationOption::NestingLimit(10));
     
     if (error) {
@@ -25,7 +25,7 @@ void handleHomeAssistantMessage(uint8_t* payload, size_t length) {
     } else if (doc["type"] == "event") {
         SERIAL_PRINTLN("Received event type message");
         JsonObject event = doc["event"];
-        if (event.containsKey("a")) {
+        if (!event["a"].isNull()) {
             JsonObject entities = event["a"];
             for (JsonPair entity : entities) {
                 const char* entity_id = entity.key().c_str();
@@ -40,17 +40,17 @@ void handleHomeAssistantMessage(uint8_t* payload, size_t length) {
                     }
                 }
             }
-        } else if (event.containsKey("c")) {
+        } else if (!event["c"].isNull()) {
             JsonObject changes = event["c"];
             for (JsonPair change : changes) {
                 const char* entity_id = change.key().c_str();
                 JsonObject state = change.value();
                 if (strcmp(entity_id, "sensor.time") == 0) {
-                    if (state.containsKey("+") && state["+"].containsKey("s")) {
+                    if (!state["+"].isNull() && !state["+"]["s"].isNull()) {
                         updateTimeAndCheckNightMode(state["+"]["s"]);
                     }
                 } else {
-                    if (state.containsKey("+")) {
+                    if (!state["+"].isNull()) {
                         state = state["+"];
                     }
                     for (int i = 0; i < NUM_MAPPINGS; i++) {
@@ -112,7 +112,7 @@ void updateTimeAndCheckNightMode(const char* time_str) {
 void toggleEntity(int x, int y) {
     for (int i = 0; i < NUM_MAPPINGS; i++) {
         if (entityMappings[i].x == x && entityMappings[i].y == y) {
-            DynamicJsonDocument doc(1024);
+            JsonDocument doc;
             doc["id"] = messageId++;
             doc["type"] = "call_service";
             
@@ -157,7 +157,7 @@ void toggleEntity(int x, int y) {
 
 
 void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_media_player) {
-    DynamicJsonDocument doc(1024);
+    JsonDocument doc;
     doc["id"] = messageId++;
     doc["type"] = "call_service";
     
@@ -182,10 +182,10 @@ void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_medi
 
 
 void subscribeToEntities() {
-    DynamicJsonDocument doc(1024);
+    JsonDocument doc;
     doc["id"] = messageId++;
     doc["type"] = "subscribe_entities";
-    JsonArray entity_ids = doc.createNestedArray("entity_ids");
+    JsonArray entity_ids = doc["entity_ids"].to<JsonArray>();
     
     for (int i = 0; i < NUM_MAPPINGS; i++) {
         entity_ids.add(entityMappings[i].entity_id);
