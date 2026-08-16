@@ -3,7 +3,9 @@
 
 #include <Arduino.h>
 
+#ifndef ENABLE_SERIAL_LOGGING
 #define ENABLE_SERIAL_LOGGING false
+#endif
 
 #define SERIAL_PRINT(x) if (ENABLE_SERIAL_LOGGING) Serial.print(x)
 #define SERIAL_PRINTLN(x) if (ENABLE_SERIAL_LOGGING) Serial.println(x)
