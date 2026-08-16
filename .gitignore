@@ -10,3 +10,5 @@ include/config.h
 # Other common ignores
 *.swp
 .DS_Store
+# Flash dumps — a full read-back embeds WIFI_PASSWORD and the HA token in plaintext
+*.bin
