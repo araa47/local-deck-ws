@@ -13,10 +13,12 @@ void updateLED(int x, int y, const JsonObject& state) {
         EntityState& currentState = entityStates[y][x];
 
         if (!state.isNull()) {
-            if (state.containsKey("s")) {
-                const char* stateValue = state["s"];
-                currentState.is_on = (strcmp(stateValue, "on") == 0 || 
-                                    strcmp(stateValue, "playing") == 0 || 
+            // as<const char*>() yields nullptr for a non-string value, so the
+            // null check has to happen before strcmp() dereferences it.
+            const char* stateValue = state["s"].as<const char*>();
+            if (stateValue) {
+                currentState.is_on = (strcmp(stateValue, "on") == 0 ||
+                                    strcmp(stateValue, "playing") == 0 ||
                                     strcmp(stateValue, "open") == 0);
             }
 
@@ -26,15 +28,15 @@ void updateLED(int x, int y, const JsonObject& state) {
                 currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
                 if (currentState.is_on) {
-                    if (attributes.containsKey("rgb_color")) {
+                    if (!attributes["rgb_color"].isNull()) {
                         JsonArray rgb = attributes["rgb_color"];
                         currentState.r = rgb[0];
                         currentState.g = rgb[1];
                         currentState.b = rgb[2];
                     }
-                    if (attributes.containsKey("brightness")) {
+                    if (!attributes["brightness"].isNull()) {
                         currentState.brightness = attributes["brightness"];
-                    } else if (attributes.containsKey("volume_level")) {
+                    } else if (!attributes["volume_level"].isNull()) {
                         currentState.volume = attributes["volume_level"];
                         currentState.brightness = currentState.volume * 255;
                     } else {
@@ -42,7 +44,7 @@ void updateLED(int x, int y, const JsonObject& state) {
                     }
                 } else {
                     // Store the volume level even when off so that when we start playing, it doesn't start at 0
-                    if (attributes.containsKey("volume_level")) {
+                    if (!attributes["volume_level"].isNull()) {
                         currentState.volume = attributes["volume_level"];
                     }
                     currentState.brightness = 0;
@@ -90,24 +92,6 @@ void displayBrightnessLevel(int brightness, uint8_t r, uint8_t g, uint8_t b) {
     }
     strip.show();
 }
-
-void displayAdjustmentLevel(int level, uint8_t r, uint8_t g, uint8_t b) {
-    float scaleFactor = isNightMode ? NIGHT_BRIGHTNESS_SCALE : 1.0f;
-    int litLEDs = map(level, 0, 255, 0, NUM_LEDS);
-    
-    for (int i = 0; i < NUM_LEDS; i++) {
-        if (i < litLEDs) {
-            uint8_t scaledR = (uint8_t)(r * scaleFactor);
-            uint8_t scaledG = (uint8_t)(g * scaleFactor);
-            uint8_t scaledB = (uint8_t)(b * scaleFactor);
-            strip.setPixelColor(i, strip.Color(scaledR, scaledG, scaledB));
-        } else {
-            strip.setPixelColor(i, strip.Color(0, 0, 0));
-        }
-    }
-    strip.show();
-}
-
 
 uint32_t applyBrightnessScalar(uint32_t color) {
     uint8_t r = (uint8_t)(color >> 16);

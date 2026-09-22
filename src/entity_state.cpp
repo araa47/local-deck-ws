@@ -1,7 +1,6 @@
 #include "entity_state.h"
 
 EntityState entityStates[ROWS][COLS];
-EntityState savedStates[ROWS][COLS];
 
 
 void initializeEntityStates() {
@@ -23,12 +22,11 @@ void initializeEntityStates() {
     }
 }
 
-void saveCurrentStates() {
-    memcpy(savedStates, entityStates, sizeof(entityStates));
-}
-
-void restoreStates() {
-    memcpy(entityStates, savedStates, sizeof(entityStates));
+// Repaint the whole grid from the current state. This replaces the old
+// saveCurrentStates()/restoreStates() pair, which rolled entityStates back to
+// a pre-gesture snapshot and so discarded the brightness the user had just
+// dialled in.
+void refreshAllLEDs() {
     for (int y = 0; y < ROWS; y++) {
         for (int x = 0; x < COLS; x++) {
             updateLED(x, y);

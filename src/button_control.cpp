@@ -1,16 +1,131 @@
 #include "button_control.h"
 
+// A button whose press was used as the target of a brightness/volume gesture
+// must not also fire toggleEntity() when it is finally released.
+static bool pressConsumedByAdjustment[ROWS][COLS] = {{false}};
 
-// Add these global variables at the top of the file
-extern bool isChildLockMode;
-extern unsigned long childLockButtonPressTime;
+static bool isModifierButton(int x, int y) {
+    return (x == UP_BUTTON_X && y == UP_BUTTON_Y) ||
+           (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y);
+}
+
+static void handleButtonRelease(int x, int y) {
+    if (pressConsumedByAdjustment[y][x]) {
+        pressConsumedByAdjustment[y][x] = false;
+        SERIAL_PRINTF("Release at (%d, %d) consumed by brightness adjustment\n", x, y);
+        return;
+    }
+
+    unsigned long pressDuration = millis() - buttonPressTime[y][x];
+
+    if (isChildLockMode && pressDuration < LONG_PRESS_TIME) {
+        return;
+    }
+
+    if (pressDuration < LONG_PRESS_TIME && !upButtonPressed && !downButtonPressed) {
+        toggleEntity(x, y);
+    } else {
+        SERIAL_PRINTF("Long press detected at (x: %d, y: %d)\n", x, y);
+    }
+}
+
+// Single implementation of the matrix scan, used both for normal presses and
+// while a brightness/volume gesture is in progress.
+//
+// Columns are only pulled up for the duration of a single read, so the pin
+// starts out floating every time. Reading it in the same instruction as the
+// pinMode() call samples the pin before the internal pull-up (~45k) has
+// charged the pin and trace capacitance, which produces phantom presses and
+// missed presses -- the reason a modifier + entity button combination only
+// registered some of the time. Give the pin time to settle first.
+static void scanMatrix() {
+    for (int y = 0; y < ROWS; y++) {
+        pinMode(rowPins[y], OUTPUT);
+        digitalWrite(rowPins[y], LOW);
+        delayMicroseconds(MATRIX_SETTLE_US);
+
+        for (int x = 0; x < COLS; x++) {
+            pinMode(colPins[x], INPUT_PULLUP);
+            delayMicroseconds(MATRIX_SETTLE_US);
+            bool reading = digitalRead(colPins[x]) == LOW;
+
+            if (reading != lastButtonState[y][x]) {
+                lastDebounceTime[y][x] = millis();
+            }
+
+            if ((millis() - lastDebounceTime[y][x]) > DEBOUNCE_TIME &&
+                reading != buttonState[y][x]) {
+                buttonState[y][x] = reading;
+
+                if (reading) {
+                    buttonPressTime[y][x] = millis();
+                    pressConsumedByAdjustment[y][x] = false;
+                    if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
+                        upButtonPressed = true;
+                    } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
+                        downButtonPressed = true;
+                    }
+                } else {
+                    if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
+                        upButtonPressed = false;
+                    } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
+                        downButtonPressed = false;
+                    } else {
+                        handleButtonRelease(x, y);
+                    }
+                }
+            }
+
+            lastButtonState[y][x] = reading;
+            pinMode(colPins[x], INPUT);
+        }
+
+        pinMode(rowPins[y], INPUT);
+    }
+}
+
+// Push the value the user dialled in to Home Assistant and hand the LEDs back
+// to the normal entity grid.
+//
+// This deliberately does NOT restore a pre-gesture snapshot of entityStates:
+// doing that threw away the brightness that was just set, so the deck fell
+// back to the old level and the next gesture started from a stale value.
+static void finalizeBrightnessAdjustment() {
+    if (!isBrightnessAdjustmentMode) {
+        return;
+    }
+
+    // Clear first so no second pass through the task loop can send a duplicate
+    // service call for the same gesture.
+    isBrightnessAdjustmentMode = false;
+
+    if (lastAdjustedX >= 0 && lastAdjustedY >= 0) {
+        for (int i = 0; i < NUM_MAPPINGS; i++) {
+            if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
+                SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n",
+                              lastAdjustedX, lastAdjustedY);
+                sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id,
+                                             currentAdjustmentBrightness,
+                                             isMediaPlayer(entityMappings[i].entity_id));
+                break;
+            }
+        }
+    }
+
+    lastAdjustedX = -1;
+    lastAdjustedY = -1;
+
+    refreshAllLEDs();
+    isBrightnessUpdateInProgress = false;
+    SERIAL_PRINTLN("Brightness adjustment finalized");
+}
 
 void buttonCheckTask(void * parameter) {
     SERIAL_PRINTLN("Button check task started");
     printMemoryUsage();
 
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = pdMS_TO_TICKS(10);
+    const TickType_t xFrequency = pdMS_TO_TICKS(BUTTON_SCAN_INTERVAL_MS);
     xLastWakeTime = xTaskGetTickCount();
 
     bool childLockButtonsPressed = false;
@@ -33,118 +148,41 @@ void buttonCheckTask(void * parameter) {
             childLockButtonsPressed = false;
         }
 
-        for (int y = 0; y < ROWS; y++) {
-            pinMode(rowPins[y], OUTPUT);
-            digitalWrite(rowPins[y], LOW);
+        scanMatrix();
 
-            for (int x = 0; x < COLS; x++) {
-                pinMode(colPins[x], INPUT_PULLUP);
-                bool reading = digitalRead(colPins[x]) == LOW;
+        // Brightness / volume gesture: hold UP or DOWN, then hold the entity
+        // button. Runs one step per scan tick instead of spinning in a nested
+        // blocking loop, so websocket traffic keeps flowing while ramping.
+        bool modifierHeld = upButtonPressed || downButtonPressed;
 
-                if (reading != lastButtonState[y][x]) {
-                    lastDebounceTime[y][x] = millis();
-                }
+        if (isBrightnessAdjustmentMode) {
+            bool targetStillHeld = lastAdjustedX >= 0 && lastAdjustedY >= 0 &&
+                                   buttonState[lastAdjustedY][lastAdjustedX];
+            bool timedOut = millis() - brightnessAdjustmentStartTime > BRIGHTNESS_UPDATE_TIMEOUT_MS;
 
-                if ((millis() - lastDebounceTime[y][x]) > DEBOUNCE_TIME) {
-                    if (reading != buttonState[y][x]) {
-                        buttonState[y][x] = reading;
-
-                        if (buttonState[y][x] == true) {
-                            buttonPressTime[y][x] = millis();
-
-                            if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
-                                upButtonPressed = true;
-                            } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
-                                downButtonPressed = true;
-                            }
-                        } else {
-                            if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
-                                upButtonPressed = false;
-                            } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
-                                downButtonPressed = false;
-                            } else {
-                                unsigned long pressDuration = millis() - buttonPressTime[y][x];
-                                
-                                if (!isChildLockMode || pressDuration >= LONG_PRESS_TIME) {
-                                    if (pressDuration < LONG_PRESS_TIME && !upButtonPressed && !downButtonPressed) {
-                                        toggleEntity(x, y);
-                                    } else {
-                                        SERIAL_PRINTF("Long press detected at (x: %d, y: %d)\n", x, y);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                lastButtonState[y][x] = reading;
-                pinMode(colPins[x], INPUT);
-            }
-
-            pinMode(rowPins[y], INPUT);
-        }
-
-        if ((upButtonPressed || downButtonPressed) && (millis() - lastBrightnessAdjustTime > BRIGHTNESS_ADJUST_INTERVAL)) {
-            SERIAL_PRINTLN("Entering brightness adjustment block");
-            isBrightnessUpdateInProgress = true;
-            unsigned long adjustmentStartTime = millis();
-
-            while ((upButtonPressed || downButtonPressed) && (millis() - adjustmentStartTime <= BRIGHTNESS_UPDATE_TIMEOUT_MS)) {
-                for (int y = 0; y < ROWS; y++) {
-                    for (int x = 0; x < COLS; x++) {
-                        if (buttonState[y][x] && !(x == UP_BUTTON_X && y == UP_BUTTON_Y) && !(x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y)) {
-                            SERIAL_PRINTF("Calling adjustBrightnessOrVolume for button at (%d, %d)\n", x, y);
-                            adjustBrightnessOrVolume(x, y, upButtonPressed);
-                        }
-                    }
-                }
-
-                // Add a small delay to prevent overwhelming the system
-                vTaskDelay(pdMS_TO_TICKS(10));
-
-                // Update button states
-                updateButtonStates();
-            }
-
-            lastBrightnessAdjustTime = millis();
-            isBrightnessUpdateInProgress = false;
-            if (millis() - adjustmentStartTime > BRIGHTNESS_UPDATE_TIMEOUT_MS) {
+            if (timedOut) {
                 SERIAL_PRINTLN("Brightness adjustment timeout reached");
-                isBrightnessAdjustmentMode = false;
-                restoreStates();
+            }
+
+            if (!modifierHeld || !targetStillHeld || timedOut) {
+                finalizeBrightnessAdjustment();
             } else {
-                // Finalize the brightness adjustment
-                for (int i = 0; i < NUM_MAPPINGS; i++) {
-                    if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
-                        SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
-                        if (isMediaPlayer(entityMappings[i].entity_id)) {
-                            sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, entityStates[lastAdjustedY][lastAdjustedX].volume * 255, true);
-                        } else {
-                            sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness, false);
-                        }
+                adjustBrightnessOrVolume(lastAdjustedX, lastAdjustedY, upButtonPressed);
+            }
+        } else if (modifierHeld) {
+            // Lock on to the first pressed button that actually has something
+            // to adjust; switches, scripts and covers are left alone.
+            for (int y = 0; y < ROWS && !isBrightnessAdjustmentMode; y++) {
+                for (int x = 0; x < COLS; x++) {
+                    if (!buttonState[y][x] || isModifierButton(x, y)) {
+                        continue;
+                    }
+                    if (adjustBrightnessOrVolume(x, y, upButtonPressed)) {
+                        pressConsumedByAdjustment[y][x] = true;
                         break;
                     }
                 }
             }
-            SERIAL_PRINTLN("Exiting brightness adjustment block");
-        } else if (!upButtonPressed && !downButtonPressed && isBrightnessAdjustmentMode) {
-            SERIAL_PRINTLN("Finalizing brightness adjustment");
-            isBrightnessUpdateInProgress = true;
-            for (int i = 0; i < NUM_MAPPINGS; i++) {
-                if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
-                    SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n", lastAdjustedX, lastAdjustedY);
-                    if (isMediaPlayer(entityMappings[i].entity_id)) {
-                        sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, entityStates[lastAdjustedY][lastAdjustedX].volume * 255, true);
-                    } else {
-                        sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness, false);
-                    }
-                    break;
-                }
-            }
-            isBrightnessAdjustmentMode = false;
-            isBrightnessUpdateInProgress = false;
-            restoreStates();
-            SERIAL_PRINTLN("Brightness adjustment finalized");
         }
 
         static unsigned long lastTaskMemoryPrint = 0;
@@ -155,127 +193,85 @@ void buttonCheckTask(void * parameter) {
         }
 
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
-        vTaskDelay(pdMS_TO_TICKS(10)); // Add a small delay to prevent task starvation
     }
 }
 
 bool adjustBrightnessOrVolume(int x, int y, bool increase) {
-    SERIAL_PRINTF("Entering adjustBrightnessOrVolume: x=%d, y=%d, increase=%d\n", x, y, increase);
     static unsigned long lastAdjustmentTime = 0;
-    const unsigned long ADJUSTMENT_INTERVAL = 50; // 20ms for both brightness and volume
-    const int ADJUSTMENT_STEP = 5; // Small step for smooth adjustments
 
-    // Add this check at the beginning of the function
     if (isChildLockMode) {
         SERIAL_PRINTLN("Child lock mode active, ignoring brightness/volume adjustment");
         return false;
     }
 
-    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-        SERIAL_PRINTLN("Mutex acquired in adjustBrightnessOrVolume");
-        for (int i = 0; i < NUM_MAPPINGS; i++) {
-            if (entityMappings[i].x == x && entityMappings[i].y == y) {
-                SERIAL_PRINTF("Found matching entity mapping at index %d\n", i);
-                
-                const char* entity_id = entityMappings[i].entity_id;
-                
-                if (isSwitch(entity_id)) {
-                    SERIAL_PRINTLN("Entity is a switch, skipping brightness/volume adjustment");
-                    xSemaphoreGive(xMutex);
-                    return false;
-                }
-
-                if (!isLight(entity_id) && !isMediaPlayer(entity_id)) {
-                    SERIAL_PRINTLN("Entity is neither a light nor a media player, skipping adjustment");
-                    xSemaphoreGive(xMutex);
-                    return false;
-                }
-
-                if (!isBrightnessAdjustmentMode) {
-                    SERIAL_PRINTLN("Entering adjustment mode");
-                    isBrightnessAdjustmentMode = true;
-                    saveCurrentStates();
-                    currentAdjustmentBrightness = isMediaPlayer(entity_id) ? 
-                        entityStates[y][x].volume * 255 : entityStates[y][x].brightness;
-                    brightnessAdjustmentStartTime = millis();
-                    lastAdjustedX = x;
-                    lastAdjustedY = y;
-                }
-
-                unsigned long currentTime = millis();
-
-                if (currentTime - lastAdjustmentTime >= ADJUSTMENT_INTERVAL) {
-                    if (increase) {
-                        currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + ADJUSTMENT_STEP);
-                    } else {
-                        currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - ADJUSTMENT_STEP);
-                    }
-                    SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
-
-                    if (isMediaPlayer(entity_id)) {
-                        entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
-                        SERIAL_PRINTF("Adjusted volume to %.2f\n", entityStates[y][x].volume);
-                    } else {
-                        entityStates[y][x].brightness = currentAdjustmentBrightness;
-                    }
-
-                    displayBrightnessLevel(currentAdjustmentBrightness, 
-                                           entityStates[y][x].r, 
-                                           entityStates[y][x].g, 
-                                           entityStates[y][x].b);
-
-                    lastAdjustmentTime = currentTime;
-
-                    // Add a small delay after each adjustment
-                    delay(1);
-                }
-
-                xSemaphoreGive(xMutex);
-                SERIAL_PRINTLN("Mutex released in adjustBrightnessOrVolume");
-                return true;
-            }
+    for (int i = 0; i < NUM_MAPPINGS; i++) {
+        if (entityMappings[i].x != x || entityMappings[i].y != y) {
+            continue;
         }
+
+        const char* entity_id = entityMappings[i].entity_id;
+
+        if (!isLight(entity_id) && !isMediaPlayer(entity_id)) {
+            SERIAL_PRINTLN("Entity is neither a light nor a media player, skipping adjustment");
+            return false;
+        }
+
+        // A bounded wait: the LED refresh on the websocket task holds this
+        // briefly, and dropping one step of the ramp is better than stalling
+        // the whole button task on it.
+        if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(MUTEX_WAIT_MS)) != pdTRUE) {
+            SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightnessOrVolume");
+            return isBrightnessAdjustmentMode;
+        }
+
+        if (!isBrightnessAdjustmentMode) {
+            SERIAL_PRINTF("Entering adjustment mode for entity at (%d, %d)\n", x, y);
+            isBrightnessAdjustmentMode = true;
+            // Hold off Home Assistant state echoes so they don't fight the
+            // value being dialled in, or repaint over the level bar.
+            isBrightnessUpdateInProgress = true;
+            currentAdjustmentBrightness = isMediaPlayer(entity_id)
+                ? (int)(entityStates[y][x].volume * 255.0f)
+                : entityStates[y][x].brightness;
+            brightnessAdjustmentStartTime = millis();
+            lastAdjustedX = x;
+            lastAdjustedY = y;
+            lastAdjustmentTime = 0; // take the first step immediately
+        } else if (x != lastAdjustedX || y != lastAdjustedY) {
+            // Another button was pressed mid-gesture; stay locked on the first.
+            xSemaphoreGive(xMutex);
+            return false;
+        }
+
+        unsigned long currentTime = millis();
+
+        if (currentTime - lastAdjustmentTime >= BRIGHTNESS_ADJUST_INTERVAL_MS) {
+            if (increase) {
+                currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_ADJUST_STEP);
+            } else {
+                currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_ADJUST_STEP);
+            }
+            SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
+
+            if (isMediaPlayer(entity_id)) {
+                entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
+            } else {
+                entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
+            }
+
+            displayBrightnessLevel(currentAdjustmentBrightness,
+                                   entityStates[y][x].r,
+                                   entityStates[y][x].g,
+                                   entityStates[y][x].b);
+
+            lastAdjustmentTime = currentTime;
+        }
+
         xSemaphoreGive(xMutex);
-        SERIAL_PRINTLN("Mutex released in adjustBrightnessOrVolume");
-    } else {
-        SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightnessOrVolume");
+        return true;
     }
-    SERIAL_PRINTLN("Exiting adjustBrightnessOrVolume");
+
     return false;
-}
-
-// Add this new function to update button states
-void updateButtonStates() {
-    for (int y = 0; y < ROWS; y++) {
-        pinMode(rowPins[y], OUTPUT);
-        digitalWrite(rowPins[y], LOW);
-
-        for (int x = 0; x < COLS; x++) {
-            pinMode(colPins[x], INPUT_PULLUP);
-            bool reading = digitalRead(colPins[x]) == LOW;
-
-            if (reading != lastButtonState[y][x]) {
-                lastDebounceTime[y][x] = millis();
-            }
-
-            if ((millis() - lastDebounceTime[y][x]) > DEBOUNCE_TIME) {
-                if (reading != buttonState[y][x]) {
-                    buttonState[y][x] = reading;
-
-                    if (x == UP_BUTTON_X && y == UP_BUTTON_Y) {
-                        upButtonPressed = buttonState[y][x];
-                    } else if (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y) {
-                        downButtonPressed = buttonState[y][x];
-                    }
-                }
-            }
-
-            lastButtonState[y][x] = reading;
-            pinMode(colPins[x], INPUT);
-        }
-
-        pinMode(rowPins[y], INPUT);
-    }
 }
 
 void toggleChildLock() {
@@ -286,11 +282,7 @@ void toggleChildLock() {
     } else {
         showChildLockDisabledAnimation();
     }
-    
+
     // Show existing entity states after the animation
-    for (int row = 0; row < ROWS; row++) {
-        for (int col = 0; col < COLS; col++) {
-            updateLED(col, row);
-        }
-    }
+    refreshAllLEDs();
 }

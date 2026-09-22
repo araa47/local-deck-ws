@@ -3,6 +3,10 @@
 WebSocketsClient webSocket;
 QueuedMessage queuedMessages[MAX_QUEUED_MESSAGES];
 
+// Ring buffer: queuedMessages is a FIFO, not a stack. queueHead is the oldest
+// message still waiting, queuedMessageCount how many are queued.
+static volatile int queueHead = 0;
+
 void initializeWebSocket() {
     webSocket.begin(HA_HOST, HA_PORT, "/api/websocket");
     webSocket.onEvent(webSocketEvent);
@@ -17,7 +21,7 @@ void reconnectWebSocket() {
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     SERIAL_PRINTF("WebSocket event type: %d\n", type);
-    
+
     switch(type) {
         case WStype_DISCONNECTED:
             SERIAL_PRINTLN("WebSocket disconnected");
@@ -48,39 +52,78 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 
 void queueWebSocketMessage(uint8_t* payload, size_t length) {
-    if (xSemaphoreTake(queueMutex, portMAX_DELAY) == pdTRUE) {
-        if (queuedMessageCount < MAX_QUEUED_MESSAGES) {
-            queuedMessages[queuedMessageCount].payload = (char*)malloc(length + 1);
-            if (queuedMessages[queuedMessageCount].payload) {
-                memcpy(queuedMessages[queuedMessageCount].payload, payload, length);
-                queuedMessages[queuedMessageCount].payload[length] = '\0';
-                queuedMessages[queuedMessageCount].length = length;
-                queuedMessageCount++;
-                SERIAL_PRINTF("Queued message. Count: %d, Length: %d\n", queuedMessageCount, length);
-            } else {
-                SERIAL_PRINTLN("Failed to allocate memory for queued message");
-            }
-        } else {
-            SERIAL_PRINTLN("Message queue is full, dropping message");
-        }
-        xSemaphoreGive(queueMutex);
+    if (xSemaphoreTake(queueMutex, pdMS_TO_TICKS(QUEUE_MUTEX_WAIT_MS)) != pdTRUE) {
+        SERIAL_PRINTLN("Failed to acquire queue mutex in queueWebSocketMessage");
+        return;
     }
+
+    if (queuedMessageCount >= MAX_QUEUED_MESSAGES) {
+        // Full: drop the OLDEST message rather than the incoming one. These are
+        // Home Assistant state snapshots, so the newest ones are what matter --
+        // keeping stale ones is what left entities showing the wrong level.
+        SERIAL_PRINTLN("Message queue is full, dropping oldest message");
+        free(queuedMessages[queueHead].payload);
+        queuedMessages[queueHead].payload = NULL;
+        queueHead = (queueHead + 1) % MAX_QUEUED_MESSAGES;
+        queuedMessageCount = queuedMessageCount - 1;
+    }
+
+    char* buffer = (char*)malloc(length + 1);
+    if (!buffer) {
+        SERIAL_PRINTLN("Failed to allocate memory for queued message");
+        xSemaphoreGive(queueMutex);
+        return;
+    }
+
+    int tail = (queueHead + queuedMessageCount) % MAX_QUEUED_MESSAGES;
+    memcpy(buffer, payload, length);
+    buffer[length] = '\0';
+    queuedMessages[tail].payload = buffer;
+    queuedMessages[tail].length = length;
+    queuedMessageCount = queuedMessageCount + 1;
+    SERIAL_PRINTF("Queued message. Count: %d, Length: %d\n", queuedMessageCount, length);
+
+    xSemaphoreGive(queueMutex);
 }
 
 
 void processQueuedMessages() {
-    if (xSemaphoreTake(queueMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        int processedCount = 0;
-        unsigned long startTime = millis();
-        while (queuedMessageCount > 0 && processedCount < 5 && (millis() - startTime) < 1000) {  // Process up to 5 messages or for 500ms max
-            queuedMessageCount--;
-            webSocketEvent(WStype_TEXT, (uint8_t*)queuedMessages[queuedMessageCount].payload, queuedMessages[queuedMessageCount].length);
-            free(queuedMessages[queuedMessageCount].payload);
-            processedCount++;
-            SERIAL_PRINTF("Processed %d queued messages. Remaining: %d\n", processedCount, queuedMessageCount);
+    int processedCount = 0;
+    unsigned long startTime = millis();
+
+    while (processedCount < MAX_MESSAGES_PER_DRAIN &&
+           (millis() - startTime) < QUEUE_DRAIN_BUDGET_MS) {
+        char* payload = NULL;
+        size_t length = 0;
+
+        // Pop under the mutex, then release it before handling the message:
+        // handling can re-enter queueWebSocketMessage(), and this mutex is not
+        // recursive.
+        if (xSemaphoreTake(queueMutex, pdMS_TO_TICKS(QUEUE_MUTEX_WAIT_MS)) != pdTRUE) {
+            SERIAL_PRINTLN("Failed to acquire queue mutex in processQueuedMessages");
+            return;
         }
+
+        if (queuedMessageCount > 0) {
+            payload = queuedMessages[queueHead].payload;
+            length = queuedMessages[queueHead].length;
+            queuedMessages[queueHead].payload = NULL;
+            queueHead = (queueHead + 1) % MAX_QUEUED_MESSAGES;
+            queuedMessageCount = queuedMessageCount - 1;
+        }
+
         xSemaphoreGive(queueMutex);
-    } else {
-        SERIAL_PRINTLN("Failed to acquire queue mutex in processQueuedMessages");
+
+        if (!payload) {
+            break; // queue drained
+        }
+
+        webSocketEvent(WStype_TEXT, (uint8_t*)payload, length);
+        free(payload);
+        processedCount++;
+    }
+
+    if (processedCount > 0) {
+        SERIAL_PRINTF("Processed %d queued messages. Remaining: %d\n", processedCount, queuedMessageCount);
     }
 }
