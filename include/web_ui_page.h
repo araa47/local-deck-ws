@@ -98,6 +98,15 @@ h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
   .key .domain { display: none; }
 }
 .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.section-head h2 { margin: 0; }
+.modes { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.modes button { border: 0; border-radius: 0; padding: 6px 12px; background: var(--bg); color: var(--muted); }
+.modes button[aria-pressed=true] { background: var(--accent); color: #fff; }
+.testing .key:not(.reserved):not(.empty) { cursor: pointer; }
+.key.pressed { transform: scale(.94); transition: transform .08s; }
+.device-line { color: var(--muted); font-size: 12px; margin-top: 12px; }
+.device-line.warn { color: var(--warn); }
 .editor { margin-top: 16px; display: grid; gap: 12px; }
 .editor[hidden] { display: none; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -168,9 +177,15 @@ dialog textarea {
 </header>
 <main>
   <section>
-    <h2>Buttons</h2>
+    <div class="section-head">
+      <h2>Buttons</h2>
+      <div class="modes" role="group" aria-label="Mode">
+        <button id="mode-edit" aria-pressed="true">Edit</button>
+        <button id="mode-test" aria-pressed="false">Test</button>
+      </div>
+    </div>
     <div id="deck" class="deck"></div>
-    <p class="hint" id="hint">Drag an entity onto a button. Drag buttons onto each other to swap them, or back onto the list to clear. Or tap a button to edit it, then tap an entity to put it there.</p>
+    <p class="hint" id="hint"></p>
     <div id="editor" class="editor" hidden>
       <label>Entity
         <input id="ed-entity" type="text" list="entity-options" autocomplete="off" spellcheck="false" placeholder="light.kitchen">
@@ -191,6 +206,7 @@ dialog textarea {
       <button id="export">Export as config.h</button>
       <button id="reset" class="danger">Reset to config.h</button>
     </div>
+    <p class="device-line" id="device-line"></p>
   </section>
   <section>
     <h2>Home Assistant entities</h2>
@@ -238,6 +254,12 @@ let selected = null;        // "x,y" being edited
 let armed = null;           // entity id picked in the list, waiting for a tap on a key
 let saveTimer = null, saving = false, saveAgain = false;
 let dragging = false;       // polls hold off mid-drag so the grid isn't rebuilt under it
+let testing = false;        // Test mode: clicking a key taps it, as on the deck
+let entityLoad = 0;         // bumps per load, so a superseded load stops
+const HINTS = {
+  edit: "Drag an entity onto a button. Drag buttons onto each other to swap them, or back onto the list to clear. Or tap a button to edit it, then tap an entity to put it there.",
+  test: "Click a key to tap it, exactly like tapping it on the deck: lights and switches toggle, scripts run, media players play / pause. The ▲/▼ gestures need the real keys."
+};
 
 const key = (x, y) => x + "," + y;
 const domainOf = id => id.split(".")[0];
@@ -255,10 +277,13 @@ async function api(path, body) {
   const options = body === undefined ? {} : {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
   };
-  const response = await fetch(path, options);
+  let response;
+  try { response = await fetch(path, options); }
+  catch (err) { throw new Error("the deck didn't answer"); }
   if (response.status === 204) return null;
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error((data && data.error) || ("HTTP " + response.status));
+  if (data === null) throw new Error("the deck sent back an incomplete answer");
   return data;
 }
 
@@ -280,7 +305,26 @@ function takeDevice(data, adoptLayout) {
   if (adoptLayout) renderEditor();
 }
 
+function formatUptime(s) {
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m";
+  if (s < 86400) return Math.floor(s / 3600) + "h " + Math.floor(s % 3600 / 60) + "m";
+  return Math.floor(s / 86400) + "d " + Math.floor(s % 86400 / 3600) + "h";
+}
+
+function renderDeviceLine() {
+  const d = device && device.device;
+  const line = $("device-line");
+  if (!d) { line.textContent = ""; return; }
+  const bad = ["crash", "task watchdog", "interrupt watchdog", "watchdog", "brownout"].includes(d.reset_reason);
+  line.className = "device-line" + (bad ? " warn" : "");
+  line.textContent = "Deck up " + formatUptime(d.uptime_s) + " · last restart: " + d.reset_reason +
+    (d.ha_disconnects ? " · Home Assistant dropped " + d.ha_disconnects + "× since" : "") +
+    " · " + Math.round(d.free_heap / 1024) + " KB free";
+}
+
 function renderStatus(state) {
+  renderDeviceLine();
   const ha = $("ha");
   ha.className = "pill " + (device && device.ha_connected ? "ok" : "bad");
   ha.textContent = device && device.ha_connected ? "Home Assistant connected" : "Home Assistant offline";
@@ -341,7 +385,7 @@ function renderKey(x, y, liveState) {
     name.textContent = nameOf(cell.entity_id);
     sub.textContent = cell.entity_id;
     el.title = cell.entity_id;
-    el.draggable = true;
+    el.draggable = !testing;
     // Only trust live state if the deck is still showing the same entity.
     const lit = liveState && liveState.entity_id === cell.entity_id ? liveColor(liveState) : null;
     el.style.setProperty("--led", lit || "transparent");
@@ -386,7 +430,23 @@ function endDrag() {
   $("list").classList.remove("drop");
 }
 
+async function tapKey(k) {
+  const [x, y] = k.split(",").map(Number);
+  if (isReserved(x, y) || !layout.get(k)) return;
+  const el = document.querySelector('[data-key="' + k + '"]');
+  if (el) { el.classList.add("pressed"); setTimeout(() => el.classList.remove("pressed"), 150); }
+  try {
+    await api("/api/press", {x, y});
+    // Home Assistant takes a moment to report the new state back.
+    setTimeout(poll, 400);
+    setTimeout(poll, 1500);
+  } catch (err) {
+    toast("Tap failed: " + err.message);
+  }
+}
+
 function onKeyTap(k) {
+  if (testing) { tapKey(k); return; }
   if (armed) {
     assign(k, armed);
     armed = null;
@@ -496,11 +556,21 @@ $("ed-color").addEventListener("input", e => editSelected({color: e.target.value
 $("ed-brightness").addEventListener("input", e => editSelected({brightness: Number(e.target.value)}, 400));
 $("ed-clear").addEventListener("click", () => clearKey(selected));
 $("ed-close").addEventListener("click", () => { selected = null; renderDeck(); renderEditor(); });
-$("ed-press").addEventListener("click", async () => {
-  const [x, y] = selected.split(",").map(Number);
-  try { await api("/api/press", {x, y}); setTimeout(poll, 400); }
-  catch (err) { toast("Press failed: " + err.message); }
-});
+$("ed-press").addEventListener("click", () => tapKey(selected));
+
+function setMode(test) {
+  testing = test;
+  $("mode-edit").setAttribute("aria-pressed", String(!test));
+  $("mode-test").setAttribute("aria-pressed", String(test));
+  $("deck").classList.toggle("testing", test);
+  $("hint").textContent = test ? HINTS.test : HINTS.edit;
+  if (test) { selected = null; armed = null; renderList(); }
+  renderDeck();
+  renderEditor();
+  try { localStorage.setItem("mode", test ? "test" : "edit"); } catch (err) {}
+}
+$("mode-edit").addEventListener("click", () => setMode(false));
+$("mode-test").addEventListener("click", () => setMode(true));
 
 function renderChips() {
   const counts = new Map();
@@ -583,24 +653,40 @@ $("list").addEventListener("drop", e => {
 });
 $("search").addEventListener("input", renderList);
 
-async function loadEntities() {
-  $("refresh").disabled = true;
-  $("list").replaceChildren(Object.assign(document.createElement("div"),
-    {className: "empty-note", textContent: "Asking Home Assistant…"}));
-  try {
-    entities = await api("/api/entities");
-    entities.sort((a, b) => a[1].localeCompare(b[1]));
-    names = new Map(entities.map(e => [e[0], e[1]]));
-    const options = $("entity-options");
-    options.replaceChildren(...entities.map(e => Object.assign(document.createElement("option"),
-      {value: e[0], label: e[1]})));
-  } catch (err) {
-    toast("Could not load entities: " + err.message);
-  }
-  $("refresh").disabled = false;
+function takeEntities(list) {
+  entities = list.slice().sort((a, b) => a[1].localeCompare(b[1]));
+  names = new Map(entities.map(e => [e[0], e[1]]));
   renderChips();
   renderList();
   renderDeck();
+}
+
+// A page at a time, so the list fills in as it arrives and the deck is never
+// tied up for long answering one request.
+async function loadEntities() {
+  const load = ++entityLoad;
+  $("refresh").disabled = true;
+  $("list").replaceChildren(Object.assign(document.createElement("div"),
+    {className: "empty-note", textContent: "Asking Home Assistant…"}));
+  const loaded = [];
+  try {
+    for (;;) {
+      const page = await api("/api/entities?offset=" + loaded.length);
+      if (load !== entityLoad) return;
+      if (!page || !Array.isArray(page.entities)) throw new Error("the deck sent back something unexpected");
+      loaded.push(...page.entities);
+      takeEntities(loaded);
+      if (!page.entities.length || loaded.length >= page.total) break;
+    }
+    $("entity-options").replaceChildren(...entities.map(e => Object.assign(document.createElement("option"),
+      {value: e[0], label: e[1]})));
+  } catch (err) {
+    if (load === entityLoad) toast("Could not load entities: " + err.message);
+  }
+  if (load === entityLoad) {
+    $("refresh").disabled = false;
+    if (!loaded.length) renderList();
+  }
 }
 $("refresh").addEventListener("click", loadEntities);
 
@@ -650,6 +736,9 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") { armed = null; selected = null; renderList(); renderDeck(); renderEditor(); }
 });
 
+let savedMode = "edit";
+try { savedMode = localStorage.getItem("mode") || "edit"; } catch (err) {}
+setMode(savedMode === "test");
 poll().then(loadEntities);
 setInterval(() => { if (!document.hidden) poll(); }, 3000);
 </script>

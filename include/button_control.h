@@ -58,6 +58,8 @@ extern unsigned long brightnessAdjustmentStartTime;
 extern int lastAdjustedX;
 extern int lastAdjustedY;
 
+extern TaskHandle_t buttonTaskHandle;
+
 void buttonCheckTask(void * parameter);
 bool adjustBrightnessOrVolume(int x, int y, bool increase);
 void toggleChildLock();

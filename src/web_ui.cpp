@@ -9,6 +9,8 @@
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
 #include <lwip/sockets.h>
+#include <esp_system.h>
+#include "button_control.h"
 #include "button_config.h"
 #include "entity_state.h"
 #include "homeassistant_handler.h"
@@ -160,6 +162,22 @@ static bool hexToColor(const char* hex, uint8_t& r, uint8_t& g, uint8_t& b) {
     return true;
 }
 
+static const char* resetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON:   return "power on";
+        case ESP_RST_EXT:       return "external reset";
+        case ESP_RST_SW:        return "software restart";
+        case ESP_RST_PANIC:     return "crash";
+        case ESP_RST_INT_WDT:   return "interrupt watchdog";
+        case ESP_RST_TASK_WDT:  return "task watchdog";
+        case ESP_RST_WDT:       return "watchdog";
+        case ESP_RST_DEEPSLEEP: return "deep sleep";
+        case ESP_RST_BROWNOUT:  return "brownout";
+        case ESP_RST_SDIO:      return "SDIO";
+        default:                return "reset";  // USB / flashing, among others
+    }
+}
+
 static void addCoords(JsonArray arr, int x, int y) {
     arr.add(x);
     arr.add(y);
@@ -180,6 +198,20 @@ static void sendLayout() {
     doc["customised"] = isButtonConfigCustomised();
     doc["child_lock_on"] = isChildLockMode;
     doc["night"] = isNightMode;
+
+    // So a reboot, or a dropped Home Assistant connection, is visible from
+    // the browser. Stack figures are the least free the task has ever had,
+    // in bytes.
+    JsonObject diag = doc["device"].to<JsonObject>();
+    diag["uptime_s"] = millis() / 1000;
+    diag["reset_reason"] = resetReasonName(esp_reset_reason());
+    diag["ha_disconnects"] = homeAssistantDisconnectCount();
+    diag["free_heap"] = esp_get_free_heap_size();
+    diag["min_free_heap"] = esp_get_minimum_free_heap_size();
+    diag["loop_stack_free"] = uxTaskGetStackHighWaterMark(NULL);
+    if (buttonTaskHandle) {
+        diag["button_stack_free"] = uxTaskGetStackHighWaterMark(buttonTaskHandle);
+    }
 
     JsonArray buttons = doc["buttons"].to<JsonArray>();
     for (int y = 0; y < ROWS; y++) {
@@ -344,24 +376,37 @@ static void handlePress() {
     server.send(204);
 }
 
-// The entities a button can be bound to, as [[entity_id, name, state], ...].
-//
-// /api/states is fetched over its own HTTP connection rather than the
-// websocket, and parsed one entity at a time as it streams in: a whole
-// install's states can run to hundreds of kilobytes, far more than the deck
-// could ever hold at once. Only what the list needs is kept of each.
-static void handleEntities() {
-    if (!admit(false)) {
-        return;
-    }
+// How many entities one /api/entities page carries. Home Assistant caps a
+// rendered template at 256KB; 500 of even the longest ids stays well under.
+#define ENTITY_PAGE_SIZE 500
 
+// Headers for a body whose length isn't known up front. WebServer closes the
+// connection once the handler returns, which marks the end of the body.
+static bool sendOpenEndedHeaders() {
+    static const char headers[] =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: close\r\n\r\n";
+    return writeAll(headers, sizeof(headers) - 1);
+}
+
+static String homeAssistantUrl(const char* path) {
+    return String("http://") + HA_HOST + ":" + String(HA_PORT) + path;
+}
+
+// Fallback for a token without admin rights, which /api/template refuses:
+// stream all of /api/states and parse it one entity at a time, keeping only
+// what the list needs. Slow on a big install -- every attribute of every
+// entity goes past -- but it never holds more than one entity at once.
+// Answers with everything in one go, whatever page was asked for.
+static void streamAllStates() {
     HTTPClient http;
     // HTTP/1.0 so Home Assistant cannot answer chunked; the raw stream is then
     // exactly the JSON body.
     http.useHTTP10(true);
     http.setTimeout(10000);
-    String url = String("http://") + HA_HOST + ":" + String(HA_PORT) + "/api/states";
-    if (!http.begin(url)) {
+    if (!http.begin(homeAssistantUrl("/api/states"))) {
         sendError(502, "Could not reach Home Assistant");
         return;
     }
@@ -376,39 +421,30 @@ static void handleEntities() {
         return;
     }
 
-    // Length unknown up front, and WebServer's chunked encoding goes through
-    // WiFiClient::write(). Write the headers by hand instead and let the end
-    // of the connection mark the end of the body.
-    static const char headers[] =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: application/json\r\n"
-        "Cache-Control: no-cache\r\n"
-        "Connection: close\r\n\r\n";
-    bool ok = writeAll(headers, sizeof(headers) - 1);
-
     JsonDocument filter;
     filter["entity_id"] = true;
     filter["state"] = true;
     filter["attributes"]["friendly_name"] = true;
 
+    bool ok = sendOpenEndedHeaders();
     Stream& stream = http.getStream();
-    String out = "[";
-    bool first = true;
+    String out = "{\"entities\":[";
     int count = 0;
 
-    if (stream.find('[')) {
+    if (ok && stream.find('[')) {
         do {
             JsonDocument entity;
             DeserializationError error = deserializeJson(entity, stream,
                                                          DeserializationOption::Filter(filter),
                                                          DeserializationOption::NestingLimit(32));
+            esp_task_wdt_reset(); // a big install takes a while
             if (error) {
                 SERIAL_PRINTF("Entity list parse stopped: %s\n", error.c_str());
                 break;
             }
 
             const char* entity_id = entity["entity_id"];
-            if (!entity_id || !isSupportedEntity(entity_id)) {
+            if (!entity_id || !isSupportedEntity(entity_id) || strlen(entity_id) >= ENTITY_ID_MAX_LEN) {
                 continue;
             }
 
@@ -416,10 +452,9 @@ static void handleEntities() {
             row.add(entity_id);
             row.add(entity["attributes"]["friendly_name"] | entity_id);
             row.add(entity["state"] | "");
-            if (!first) {
+            if (count > 0) {
                 out += ',';
             }
-            first = false;
             // serializeJson() replaces a String's contents rather than
             // appending to it, so it can't write into `out` directly.
             String serialized;
@@ -428,23 +463,101 @@ static void handleEntities() {
             count++;
 
             if (out.length() > 1024) {
-                ok = ok && writeAll(out.c_str(), out.length());
+                ok = writeAll(out.c_str(), out.length());
                 out = "";
                 if (!ok) {
                     break; // browser went away
                 }
             }
-            esp_task_wdt_reset(); // a big install takes a few seconds
         } while (stream.findUntil(",", "]"));
     }
 
-    out += ']';
+    out += "],\"total\":";
+    out += count;
+    out += '}';
     if (ok) {
         writeAll(out.c_str(), out.length());
     }
     http.end();
-    server.client().stop();
     SERIAL_PRINTF("Sent %d entities to the web UI\n", count);
+}
+
+// GET /api/entities?offset=N
+//   {"total": 1234, "entities": [[entity_id, name, state], ...]}
+// One page of the entities a button can be bound to, from `offset`.
+//
+// Home Assistant does the filtering, through a template, and the deck just
+// passes the result through. The alternative -- parsing every entity's full
+// state on the deck -- took ~16s on a 3800-entity install, and the deck
+// answers nothing else while it is busy.
+static void handleEntities() {
+    if (!admit(false)) {
+        return;
+    }
+    long offset = max(0L, server.arg("offset").toInt());
+
+    // Ids too long for a button are left out: they could never be assigned.
+    String tpl =
+        "{%- set sel = states | selectattr('domain', 'in', " SUPPORTED_DOMAINS_JINJA ")"
+        " | rejectattr('entity_id', 'search', '.{" + String(ENTITY_ID_MAX_LEN) + "}') | list -%}"
+        "{\"total\":{{ sel | length }},\"entities\":["
+        "{%- for s in sel[" + String(offset) + ":" + String(offset + ENTITY_PAGE_SIZE) + "] -%}"
+        "{{- ',' if not loop.first -}}{{ [s.entity_id, s.name, s.state] | to_json }}"
+        "{%- endfor -%}]}";
+    JsonDocument request;
+    request["template"] = tpl;
+    String body;
+    serializeJson(request, body);
+
+    HTTPClient http;
+    http.useHTTP10(true);
+    http.setTimeout(10000);
+    if (!http.begin(homeAssistantUrl("/api/template"))) {
+        sendError(502, "Could not reach Home Assistant");
+        return;
+    }
+    http.addHeader("Authorization", "Bearer " HA_API_PASSWORD);
+    http.addHeader("Content-Type", "application/json");
+
+    int status = http.POST(body);
+    if (status == 401 || status == 403) {
+        http.end();
+        SERIAL_PRINTLN("Token can't render templates, falling back to /api/states");
+        streamAllStates();
+        return;
+    }
+    if (status != 200) {
+        http.end();
+        char message[64];
+        snprintf(message, sizeof(message), "Home Assistant answered %d", status);
+        sendError(502, message);
+        return;
+    }
+
+    int length = http.getSize();
+    bool ok;
+    if (length >= 0) {
+        server.setContentLength(length);
+        server.send(200, "application/json", "");
+        ok = true;
+    } else {
+        ok = sendOpenEndedHeaders();
+    }
+
+    Stream& stream = http.getStream();
+    uint8_t buffer[1024];
+    long remaining = length;
+    while (ok && (length < 0 || remaining > 0)) {
+        size_t want = length < 0 ? sizeof(buffer) : min((long)sizeof(buffer), remaining);
+        size_t got = stream.readBytes(buffer, want);
+        if (got == 0) {
+            break; // Home Assistant finished (or stalled past the timeout)
+        }
+        ok = writeAll((const char*)buffer, got);
+        remaining -= got;
+        esp_task_wdt_reset();
+    }
+    http.end();
 }
 
 void initWebUI() {
@@ -474,6 +587,12 @@ void onWebUIWiFiConnected() {
 }
 
 void handleWebUI() {
+    // WiFiClient::connected() decides from errno without clearing it first,
+    // so whatever socket call last failed on this task -- the Home Assistant
+    // websocket runs here too -- could make a brand new browser connection
+    // look closed. WebServer then dropped it unanswered: a request that
+    // failed for no visible reason, most often right after an entity load.
+    errno = 0;
     server.handleClient();
 }
 
