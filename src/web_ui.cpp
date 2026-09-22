@@ -8,6 +8,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
+#include <lwip/sockets.h>
 #include "button_config.h"
 #include "entity_state.h"
 #include "homeassistant_handler.h"
@@ -85,10 +86,52 @@ static bool admit(bool mutating) {
     return true;
 }
 
+// Write straight to the socket, waiting out a full send buffer.
+//
+// WiFiClient::write() -- which WebServer::send() and sendContent() use --
+// gives up and closes the connection on any send() error other than EAGAIN,
+// and lwIP also reports a momentarily full send queue as ENOMEM. So anything
+// much bigger than the ~5.7KB TCP send buffer was cut off part way through,
+// more often than not.
+static bool writeAll(const char* data, size_t len) {
+    int fd = server.client().fd();
+    if (fd < 0) {
+        return false;
+    }
+    unsigned long lastProgress = millis();
+    while (len > 0) {
+        int sent = send(fd, data, len, MSG_DONTWAIT);
+        if (sent > 0) {
+            data += sent;
+            len -= sent;
+            lastProgress = millis();
+            continue;
+        }
+        if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOMEM) {
+            SERIAL_PRINTF("Web UI send failed, errno %d\n", errno);
+            return false;
+        }
+        if (millis() - lastProgress > 10000) {
+            SERIAL_PRINTLN("Web UI send stalled, giving up");
+            return false;
+        }
+        esp_task_wdt_reset();
+        delay(2);
+    }
+    return true;
+}
+
+// WebServer writes the (small) headers; the body goes through writeAll().
+static void sendBody(int code, const char* contentType, const char* body, size_t len) {
+    server.setContentLength(len);
+    server.send(code, contentType, "");
+    writeAll(body, len);
+}
+
 static void sendJson(int code, const JsonDocument& doc) {
     String body;
     serializeJson(doc, body);
-    server.send(code, "application/json", body);
+    sendBody(code, "application/json", body.c_str(), body.length());
 }
 
 static void sendError(int code, const char* message) {
@@ -193,7 +236,7 @@ static void handleRoot() {
         return;
     }
     server.sendHeader("Cache-Control", "no-cache");
-    server.send_P(200, "text/html", WEB_UI_PAGE);
+    sendBody(200, "text/html", WEB_UI_PAGE, strlen(WEB_UI_PAGE));
 }
 
 static void handleGetConfig() {
@@ -333,8 +376,15 @@ static void handleEntities() {
         return;
     }
 
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server.send(200, "application/json", "");
+    // Length unknown up front, and WebServer's chunked encoding goes through
+    // WiFiClient::write(). Write the headers by hand instead and let the end
+    // of the connection mark the end of the body.
+    static const char headers[] =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: close\r\n\r\n";
+    bool ok = writeAll(headers, sizeof(headers) - 1);
 
     JsonDocument filter;
     filter["entity_id"] = true;
@@ -370,21 +420,30 @@ static void handleEntities() {
                 out += ',';
             }
             first = false;
-            serializeJson(row, out);
+            // serializeJson() replaces a String's contents rather than
+            // appending to it, so it can't write into `out` directly.
+            String serialized;
+            serializeJson(row, serialized);
+            out += serialized;
             count++;
 
             if (out.length() > 1024) {
-                server.sendContent(out);
+                ok = ok && writeAll(out.c_str(), out.length());
                 out = "";
+                if (!ok) {
+                    break; // browser went away
+                }
             }
             esp_task_wdt_reset(); // a big install takes a few seconds
         } while (stream.findUntil(",", "]"));
     }
 
     out += ']';
-    server.sendContent(out);
-    server.sendContent(""); // end of chunked response
+    if (ok) {
+        writeAll(out.c_str(), out.length());
+    }
     http.end();
+    server.client().stop();
     SERIAL_PRINTF("Sent %d entities to the web UI\n", count);
 }
 
