@@ -16,10 +16,8 @@ struct EntityState {
 };
 
 extern EntityState entityStates[ROWS][COLS];
-extern EntityState savedStates[ROWS][COLS];
 
 void initializeEntityStates();
-void saveCurrentStates();
-void restoreStates();
+void refreshAllLEDs();
 
 #endif // ENTITY_STATE_H

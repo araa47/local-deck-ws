@@ -22,7 +22,6 @@ volatile bool isBrightnessUpdateInProgress = false;
 bool isNightMode = false;
 int currentHour = -1;
 bool isChildLockMode = false;
-unsigned long childLockButtonPressTime = 0;
 
 // Button control variables
 unsigned long lastDebounceTime[ROWS][COLS] = {{0}};
@@ -31,7 +30,6 @@ bool lastButtonState[ROWS][COLS] = {{false}};
 unsigned long buttonPressTime[ROWS][COLS] = {{0}};
 bool upButtonPressed = false;
 bool downButtonPressed = false;
-unsigned long lastBrightnessAdjustTime = 0;
 bool isBrightnessAdjustmentMode = false;
 int currentAdjustmentBrightness = 0;
 unsigned long brightnessAdjustmentStartTime = 0;
@@ -84,7 +82,16 @@ void setup() {
         NULL
     );
 
+#if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 30000,
+        .idle_core_mask = 0,
+        .trigger_panic = true
+    };
+    esp_task_wdt_init(&twdt_config); // 30 second timeout, panic on timeout
+#else
     esp_task_wdt_init(30, true); // 30 second timeout, panic on timeout
+#endif
     esp_task_wdt_add(NULL); // Add current thread to WDT watch
 
     SERIAL_PRINTLN("Setup complete.");
@@ -93,11 +100,11 @@ void setup() {
 
 void loop() {
     esp_task_wdt_reset(); // Reset watchdog timer
-    
+
     static unsigned long lastMemoryPrint = 0;
     static unsigned long lastMessageProcess = 0;
     static unsigned long brightnessUpdateStartTime = 0;
-    
+
     if (millis() - lastMemoryPrint > 5000) {  // Print memory usage every 5 seconds
         printMemoryUsage();
         lastMemoryPrint = millis();
@@ -105,26 +112,24 @@ void loop() {
 
     webSocket.loop();
 
-    if (millis() - lastMessageProcess > 100) {  // Process messages every 100ms
-        // SERIAL_PRINTLN("Starting to process queued messages");
-        if (!isBrightnessUpdateInProgress) {
-            processQueuedMessages();
-        } else {
-            SERIAL_PRINTLN("Skipping message processing due to brightness update in progress");
-            // Add a timeout for brightness update
-            if (millis() - brightnessUpdateStartTime > BRIGHTNESS_UPDATE_TIMEOUT_MS) {  
-                SERIAL_PRINTLN("Brightness update timeout reached, resetting flag");
-                isBrightnessUpdateInProgress = false;
-            }
+    // buttonCheckTask owns this flag and clears it when a gesture finishes.
+    // This is only a backstop in case it somehow never does.
+    if (isBrightnessUpdateInProgress) {
+        if (brightnessUpdateStartTime == 0) {
+            brightnessUpdateStartTime = millis();
+        } else if (millis() - brightnessUpdateStartTime > BRIGHTNESS_UPDATE_TIMEOUT_MS) {
+            SERIAL_PRINTLN("Brightness update timeout reached, resetting flag");
+            isBrightnessUpdateInProgress = false;
+            brightnessUpdateStartTime = 0;
         }
-        lastMessageProcess = millis();
-        // SERIAL_PRINTLN("Finished processing queued messages");
+    } else {
+        brightnessUpdateStartTime = 0;
     }
 
-    if (isBrightnessUpdateInProgress && brightnessUpdateStartTime == 0) {
-        brightnessUpdateStartTime = millis();
-    } else if (!isBrightnessUpdateInProgress) {
-        brightnessUpdateStartTime = 0;
+    // Drain often so the grid catches up quickly once a gesture ends.
+    if (!isBrightnessUpdateInProgress && millis() - lastMessageProcess > 20) {
+        processQueuedMessages();
+        lastMessageProcess = millis();
     }
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -132,6 +137,6 @@ void loop() {
             reconnectWebSocket();
         }
     }
-    
-    delay(10);
+
+    delay(5);
 }
