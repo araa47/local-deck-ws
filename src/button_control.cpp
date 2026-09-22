@@ -9,6 +9,19 @@ static bool isModifierButton(int x, int y) {
            (x == DOWN_BUTTON_X && y == DOWN_BUTTON_Y);
 }
 
+// Is there something at this position whose level can actually be ramped?
+// Kept separate from adjustBrightnessOrVolume()'s return value, which also
+// goes false when a step is dropped because the mutex was busy.
+static bool isAdjustableEntity(int x, int y) {
+    for (int i = 0; i < NUM_MAPPINGS; i++) {
+        if (entityMappings[i].x == x && entityMappings[i].y == y) {
+            return isLight(entityMappings[i].entity_id) ||
+                   isMediaPlayer(entityMappings[i].entity_id);
+        }
+    }
+    return false;
+}
+
 static void handleButtonRelease(int x, int y) {
     if (pressConsumedByAdjustment[y][x]) {
         pressConsumedByAdjustment[y][x] = false;
@@ -173,18 +186,22 @@ void buttonCheckTask(void * parameter) {
             } else {
                 adjustBrightnessOrVolume(lastAdjustedX, lastAdjustedY, upButtonPressed);
             }
-        } else if (modifierHeld) {
+        } else if (modifierHeld && !isChildLockMode) {
             // Lock on to the first pressed button that actually has something
             // to adjust; switches, scripts and covers are left alone.
             for (int y = 0; y < ROWS && !isBrightnessAdjustmentMode; y++) {
                 for (int x = 0; x < COLS; x++) {
-                    if (!buttonState[y][x] || isModifierButton(x, y)) {
+                    if (!buttonState[y][x] || isModifierButton(x, y) ||
+                        !isAdjustableEntity(x, y)) {
                         continue;
                     }
-                    if (adjustBrightnessOrVolume(x, y, upButtonPressed)) {
-                        pressConsumedByAdjustment[y][x] = true;
-                        break;
-                    }
+                    // The press belongs to this gesture from here on, even if
+                    // the first step is dropped because the mutex was busy --
+                    // otherwise a dropped step degrades into a toggle on
+                    // release, which is the opposite of what the user asked for.
+                    pressConsumedByAdjustment[y][x] = true;
+                    adjustBrightnessOrVolume(x, y, upButtonPressed);
+                    break;
                 }
             }
         }
