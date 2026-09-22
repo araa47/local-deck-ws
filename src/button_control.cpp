@@ -17,12 +17,12 @@ static bool isAdjustableEntity(int x, int y) {
     if (!getButtonEntityId(x, y, entity_id, sizeof(entity_id))) {
         return false;
     }
-    if (isCover(entity_id)) {
-        // Only covers that actually accept a position. One that does not
-        // (an awning that only opens, closes and stops) keeps plain
-        // toggle behaviour rather than being sent a command Home
-        // Assistant would reject.
-        return entityStates[y][x].supports_position;
+    if (isPercentEntity(entity_id)) {
+        // Only covers that actually accept a position, and fans that accept a
+        // speed. One that does not (an awning that only opens, closes and
+        // stops; a fan that is just on or off) keeps plain toggle behaviour
+        // rather than being sent a command Home Assistant would reject.
+        return entityStates[y][x].supports_level;
     }
     return isLight(entity_id) || isMediaPlayer(entity_id);
 }
@@ -250,8 +250,8 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
         isBrightnessUpdateInProgress = true;
         if (isMediaPlayer(entity_id)) {
             currentAdjustmentBrightness = (int)(entityStates[y][x].volume * 255.0f);
-        } else if (isCover(entity_id)) {
-            currentAdjustmentBrightness = (entityStates[y][x].position * 255) / 100;
+        } else if (isPercentEntity(entity_id)) {
+            currentAdjustmentBrightness = (entityStates[y][x].level * 255) / 100;
         } else {
             currentAdjustmentBrightness = entityStates[y][x].brightness;
         }
@@ -277,8 +277,8 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
 
         if (isMediaPlayer(entity_id)) {
             entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
-        } else if (isCover(entity_id)) {
-            entityStates[y][x].position = (uint8_t)((currentAdjustmentBrightness * 100 + 127) / 255);
+        } else if (isPercentEntity(entity_id)) {
+            entityStates[y][x].level = (uint8_t)((currentAdjustmentBrightness * 100 + 127) / 255);
             entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
         } else {
             entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;

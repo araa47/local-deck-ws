@@ -192,6 +192,15 @@ void sendLevelUpdate(const char* entity_id, int value) {
         doc["target"]["entity_id"] = entity_id;
         doc["service_data"]["position"] = position;
         SERIAL_PRINTF("Setting position for %s to %d\n", entity_id, position);
+    } else if (isFan(entity_id)) {
+        // Also 0-100. Home Assistant rounds to the fan's own speed steps, and
+        // 0 turns it off.
+        int percentage = (value * 100 + 127) / 255;
+        doc["domain"] = "fan";
+        doc["service"] = "set_percentage";
+        doc["target"]["entity_id"] = entity_id;
+        doc["service_data"]["percentage"] = percentage;
+        SERIAL_PRINTF("Setting speed for %s to %d%%\n", entity_id, percentage);
     } else if (is_media_player) {
         doc["domain"] = "media_player";
         doc["service"] = "volume_set";

@@ -14,14 +14,19 @@ struct EntityState {
     int x, y;
     bool is_playing;
     float volume;
-    uint8_t position;          // covers: 0-100, 0 = closed
-    bool supports_position;    // covers: can this one be sent to a position?
+    // Covers and fans: 0-100 -- how far open, or fan speed.
+    uint8_t level;
+    // Can this one be sent to a level? Set from supported_features.
+    bool supports_level;
 };
 
 // CoverEntityFeature.SET_POSITION. A cover that lacks this bit reports
 // current_position but rejects cover.set_cover_position, so the ramp has to
 // check before offering to drive it.
 #define COVER_SET_POSITION 4
+
+// FanEntityFeature.SET_SPEED. Same idea: a fan without it only turns on and off.
+#define FAN_SET_SPEED 1
 
 // isCover() lives here rather than alongside isLight()/isSwitch()/isMediaPlayer()
 // in config.h on purpose: config.h is user-owned and gitignored, so adding a
@@ -32,11 +37,21 @@ inline bool isCover(const char* entity_id) {
     return strncmp(entity_id, "cover.", 6) == 0;
 }
 
+inline bool isFan(const char* entity_id) {
+    return strncmp(entity_id, "fan.", 4) == 0;
+}
+
+// Entities whose level is a 0-100 percentage in Home Assistant: cover
+// position and fan speed. They share EntityState::level and the ramp.
+inline bool isPercentEntity(const char* entity_id) {
+    return isCover(entity_id) || isFan(entity_id);
+}
+
 // Domains added alongside the web UI, kept here for the same reason as
 // isCover(). All of them are driven with homeassistant.toggle, like isSwitch().
 inline bool isGenericToggle(const char* entity_id) {
     return strncmp(entity_id, "input_boolean.", 14) == 0 ||
-           strncmp(entity_id, "fan.", 4) == 0 ||
+           isFan(entity_id) ||
            strncmp(entity_id, "automation.", 11) == 0;
 }
 
