@@ -266,18 +266,11 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
 
         unsigned long currentTime = millis();
 
-        // Fine steps at first so a short hold can land on an exact level, then
-        // coarse once the user has clearly committed to a long sweep.
-        bool accelerated = (currentTime - brightnessAdjustmentStartTime) >= BRIGHTNESS_ACCEL_AFTER_MS;
-        int step = accelerated ? BRIGHTNESS_ADJUST_STEP_FAST : BRIGHTNESS_ADJUST_STEP;
-        unsigned long interval = accelerated ? BRIGHTNESS_ADJUST_INTERVAL_FAST_MS
-                                             : BRIGHTNESS_ADJUST_INTERVAL_MS;
-
-        if (currentTime - lastAdjustmentTime >= interval) {
+        if (currentTime - lastAdjustmentTime >= BRIGHTNESS_ADJUST_INTERVAL_MS) {
             if (increase) {
-                currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + step);
+                currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_ADJUST_STEP);
             } else {
-                currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - step);
+                currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_ADJUST_STEP);
             }
             SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
 

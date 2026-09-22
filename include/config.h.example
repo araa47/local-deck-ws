@@ -26,19 +26,16 @@
 // Brightness / volume control.
 // Hold UP or DOWN, then hold an entity button to ramp it.
 //
-// The ramp accelerates. It starts fine, moving BRIGHTNESS_ADJUST_STEP counts
-// (out of 255) every BRIGHTNESS_ADJUST_INTERVAL_MS, so a short nudge lands on
-// the level you want -- roughly 5% for a 300ms press. Once held longer than
-// BRIGHTNESS_ACCEL_AFTER_MS it switches to the coarse step, so sweeping the
-// full range still takes about a second.
+// The ramp moves a steady BRIGHTNESS_ADJUST_STEP counts (out of 255) every
+// BRIGHTNESS_ADJUST_INTERVAL_MS -- about 10% per 300ms of hold, sweeping the
+// full range in ~3s. Lower the step for finer control, raise it for a faster
+// sweep. The interval is quantised to the scan tick, so prefer changing the
+// step.
 //
-// All of these are optional -- button_control.h defines the same defaults if
-// you leave them out of your config.
-#define BRIGHTNESS_ADJUST_STEP 2
-#define BRIGHTNESS_ADJUST_INTERVAL_MS 45
-#define BRIGHTNESS_ADJUST_STEP_FAST 9
-#define BRIGHTNESS_ADJUST_INTERVAL_FAST_MS 30
-#define BRIGHTNESS_ACCEL_AFTER_MS 800
+// Both are optional -- button_control.h defines the same defaults if you
+// leave them out of your config.
+#define BRIGHTNESS_ADJUST_STEP 4
+#define BRIGHTNESS_ADJUST_INTERVAL_MS 50
 
 // Settle time (microseconds) after a matrix column's pull-up is enabled and
 // before it is sampled. Raise this if presses are missed on long wiring.

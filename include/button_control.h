@@ -26,31 +26,19 @@
 #define MATRIX_SETTLE_US 30
 #endif
 
-// Brightness / volume ramp speed. The ramp accelerates: it starts fine so a
-// short hold lands on the level you want, then switches to the coarse step
-// once held past BRIGHTNESS_ACCEL_AFTER_MS so a full sweep is still quick.
+// Brightness / volume ramp speed: a constant BRIGHTNESS_ADJUST_STEP counts
+// (out of 255) every BRIGHTNESS_ADJUST_INTERVAL_MS. Deliberately steady --
+// a ramp that changes speed under your finger is harder to aim, not easier.
+// The defaults move about 10% per 300ms of hold, sweeping 0 -> 255 in ~3s.
 //
-// Fine phase: ~44 counts/sec, i.e. a 300ms nudge moves about 5%.
-// Coarse phase: ~300 counts/sec, i.e. 0 -> 255 in well under a second.
+// The interval is quantised to BUTTON_SCAN_INTERVAL_MS, since a step can only
+// be taken on a scan tick. Prefer changing the step to change the rate.
 #ifndef BRIGHTNESS_ADJUST_STEP
-#define BRIGHTNESS_ADJUST_STEP 2
+#define BRIGHTNESS_ADJUST_STEP 4
 #endif
 
 #ifndef BRIGHTNESS_ADJUST_INTERVAL_MS
-#define BRIGHTNESS_ADJUST_INTERVAL_MS 45
-#endif
-
-#ifndef BRIGHTNESS_ADJUST_STEP_FAST
-#define BRIGHTNESS_ADJUST_STEP_FAST 9
-#endif
-
-#ifndef BRIGHTNESS_ADJUST_INTERVAL_FAST_MS
-#define BRIGHTNESS_ADJUST_INTERVAL_FAST_MS 30
-#endif
-
-// How long the gesture must be held before the coarse step takes over.
-#ifndef BRIGHTNESS_ACCEL_AFTER_MS
-#define BRIGHTNESS_ACCEL_AFTER_MS 800
+#define BRIGHTNESS_ADJUST_INTERVAL_MS 50
 #endif
 
 // How long to wait for the shared state mutex before skipping a ramp step.
