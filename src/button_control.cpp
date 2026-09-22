@@ -15,8 +15,15 @@ static bool isModifierButton(int x, int y) {
 static bool isAdjustableEntity(int x, int y) {
     for (int i = 0; i < NUM_MAPPINGS; i++) {
         if (entityMappings[i].x == x && entityMappings[i].y == y) {
-            return isLight(entityMappings[i].entity_id) ||
-                   isMediaPlayer(entityMappings[i].entity_id);
+            const char* entity_id = entityMappings[i].entity_id;
+            if (isCover(entity_id)) {
+                // Only covers that actually accept a position. One that does not
+                // (an awning that only opens, closes and stops) keeps plain
+                // toggle behaviour rather than being sent a command Home
+                // Assistant would reject.
+                return entityStates[y][x].supports_position;
+            }
+            return isLight(entity_id) || isMediaPlayer(entity_id);
         }
     }
     return false;
@@ -117,9 +124,7 @@ static void finalizeBrightnessAdjustment(bool send) {
             if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
                 SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n",
                               lastAdjustedX, lastAdjustedY);
-                sendBrightnessOrVolumeUpdate(entityMappings[i].entity_id,
-                                             currentAdjustmentBrightness,
-                                             isMediaPlayer(entityMappings[i].entity_id));
+                sendLevelUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
                 break;
             }
         }
@@ -232,8 +237,8 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
 
         const char* entity_id = entityMappings[i].entity_id;
 
-        if (!isLight(entity_id) && !isMediaPlayer(entity_id)) {
-            SERIAL_PRINTLN("Entity is neither a light nor a media player, skipping adjustment");
+        if (!isAdjustableEntity(x, y)) {
+            SERIAL_PRINTLN("Entity has no level to adjust, skipping");
             return false;
         }
 
@@ -251,9 +256,13 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
             // Hold off Home Assistant state echoes so they don't fight the
             // value being dialled in, or repaint over the level bar.
             isBrightnessUpdateInProgress = true;
-            currentAdjustmentBrightness = isMediaPlayer(entity_id)
-                ? (int)(entityStates[y][x].volume * 255.0f)
-                : entityStates[y][x].brightness;
+            if (isMediaPlayer(entity_id)) {
+                currentAdjustmentBrightness = (int)(entityStates[y][x].volume * 255.0f);
+            } else if (isCover(entity_id)) {
+                currentAdjustmentBrightness = (entityStates[y][x].position * 255) / 100;
+            } else {
+                currentAdjustmentBrightness = entityStates[y][x].brightness;
+            }
             brightnessAdjustmentStartTime = millis();
             lastAdjustedX = x;
             lastAdjustedY = y;
@@ -276,6 +285,9 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
 
             if (isMediaPlayer(entity_id)) {
                 entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
+            } else if (isCover(entity_id)) {
+                entityStates[y][x].position = (uint8_t)((currentAdjustmentBrightness * 100 + 127) / 255);
+                entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
             } else {
                 entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
             }

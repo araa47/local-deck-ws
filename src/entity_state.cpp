@@ -22,6 +22,15 @@ void initializeEntityStates() {
     }
 }
 
+const char* entityIdAt(int x, int y) {
+    for (int i = 0; i < NUM_MAPPINGS; i++) {
+        if (entityMappings[i].x == x && entityMappings[i].y == y) {
+            return entityMappings[i].entity_id;
+        }
+    }
+    return NULL;
+}
+
 // Repaint the whole grid from the current state. This replaces the old
 // saveCurrentStates()/restoreStates() pair, which rolled entityStates back to
 // a pre-gesture snapshot and so discarded the brightness the user had just

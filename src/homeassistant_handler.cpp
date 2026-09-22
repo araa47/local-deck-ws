@@ -152,12 +152,22 @@ void toggleEntity(int x, int y) {
 
 
 
-void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_media_player) {
+void sendLevelUpdate(const char* entity_id, int value) {
     JsonDocument doc;
     doc["id"] = messageId++;
     doc["type"] = "call_service";
-    
-    if (is_media_player) {
+
+    bool is_media_player = isMediaPlayer(entity_id);
+
+    if (isCover(entity_id)) {
+        // The ramp works in 0-255 like everything else; covers take 0-100.
+        int position = (value * 100 + 127) / 255;
+        doc["domain"] = "cover";
+        doc["service"] = "set_cover_position";
+        doc["target"]["entity_id"] = entity_id;
+        doc["service_data"]["position"] = position;
+        SERIAL_PRINTF("Setting position for %s to %d\n", entity_id, position);
+    } else if (is_media_player) {
         doc["domain"] = "media_player";
         doc["service"] = "volume_set";
         doc["target"]["entity_id"] = entity_id;
