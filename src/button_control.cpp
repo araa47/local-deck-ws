@@ -90,7 +90,7 @@ static void scanMatrix() {
 // This deliberately does NOT restore a pre-gesture snapshot of entityStates:
 // doing that threw away the brightness that was just set, so the deck fell
 // back to the old level and the next gesture started from a stale value.
-static void finalizeBrightnessAdjustment() {
+static void finalizeBrightnessAdjustment(bool send) {
     if (!isBrightnessAdjustmentMode) {
         return;
     }
@@ -99,7 +99,7 @@ static void finalizeBrightnessAdjustment() {
     // service call for the same gesture.
     isBrightnessAdjustmentMode = false;
 
-    if (lastAdjustedX >= 0 && lastAdjustedY >= 0) {
+    if (send && lastAdjustedX >= 0 && lastAdjustedY >= 0) {
         for (int i = 0; i < NUM_MAPPINGS; i++) {
             if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
                 SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n",
@@ -155,7 +155,11 @@ void buttonCheckTask(void * parameter) {
         // blocking loop, so websocket traffic keeps flowing while ramping.
         bool modifierHeld = upButtonPressed || downButtonPressed;
 
-        if (isBrightnessAdjustmentMode) {
+        if (isBrightnessAdjustmentMode && isChildLockMode) {
+            // Child lock came on mid-gesture: drop it without touching the entity.
+            SERIAL_PRINTLN("Child lock enabled mid-gesture, abandoning adjustment");
+            finalizeBrightnessAdjustment(false);
+        } else if (isBrightnessAdjustmentMode) {
             bool targetStillHeld = lastAdjustedX >= 0 && lastAdjustedY >= 0 &&
                                    buttonState[lastAdjustedY][lastAdjustedX];
             bool timedOut = millis() - brightnessAdjustmentStartTime > BRIGHTNESS_UPDATE_TIMEOUT_MS;
@@ -165,7 +169,7 @@ void buttonCheckTask(void * parameter) {
             }
 
             if (!modifierHeld || !targetStillHeld || timedOut) {
-                finalizeBrightnessAdjustment();
+                finalizeBrightnessAdjustment(true);
             } else {
                 adjustBrightnessOrVolume(lastAdjustedX, lastAdjustedY, upButtonPressed);
             }
