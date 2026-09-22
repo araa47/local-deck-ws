@@ -27,8 +27,9 @@ void updateLED(int x, int y, const JsonObject& state) {
                 // If attributes are null, this might be a switch or media player. Update only the on/off state.
                 currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
-                const char* entity_id = entityIdAt(x, y);
-                bool cover = entity_id && isCover(entity_id);
+                char entity_id[ENTITY_ID_MAX_LEN];
+                bool cover = getButtonEntityId(x, y, entity_id, sizeof(entity_id)) &&
+                             isCover(entity_id);
 
                 // Covers: track position and capability whether open or closed,
                 // so a ramp can start from where the cover actually is. Only read

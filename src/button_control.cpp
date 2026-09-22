@@ -13,20 +13,18 @@ static bool isModifierButton(int x, int y) {
 // Kept separate from adjustBrightnessOrVolume()'s return value, which also
 // goes false when a step is dropped because the mutex was busy.
 static bool isAdjustableEntity(int x, int y) {
-    for (int i = 0; i < NUM_MAPPINGS; i++) {
-        if (entityMappings[i].x == x && entityMappings[i].y == y) {
-            const char* entity_id = entityMappings[i].entity_id;
-            if (isCover(entity_id)) {
-                // Only covers that actually accept a position. One that does not
-                // (an awning that only opens, closes and stops) keeps plain
-                // toggle behaviour rather than being sent a command Home
-                // Assistant would reject.
-                return entityStates[y][x].supports_position;
-            }
-            return isLight(entity_id) || isMediaPlayer(entity_id);
-        }
+    char entity_id[ENTITY_ID_MAX_LEN];
+    if (!getButtonEntityId(x, y, entity_id, sizeof(entity_id))) {
+        return false;
     }
-    return false;
+    if (isCover(entity_id)) {
+        // Only covers that actually accept a position. One that does not
+        // (an awning that only opens, closes and stops) keeps plain
+        // toggle behaviour rather than being sent a command Home
+        // Assistant would reject.
+        return entityStates[y][x].supports_position;
+    }
+    return isLight(entity_id) || isMediaPlayer(entity_id);
 }
 
 static void handleButtonRelease(int x, int y) {
@@ -119,15 +117,11 @@ static void finalizeBrightnessAdjustment(bool send) {
     // service call for the same gesture.
     isBrightnessAdjustmentMode = false;
 
-    if (send && lastAdjustedX >= 0 && lastAdjustedY >= 0) {
-        for (int i = 0; i < NUM_MAPPINGS; i++) {
-            if (entityMappings[i].x == lastAdjustedX && entityMappings[i].y == lastAdjustedY) {
-                SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n",
-                              lastAdjustedX, lastAdjustedY);
-                sendLevelUpdate(entityMappings[i].entity_id, currentAdjustmentBrightness);
-                break;
-            }
-        }
+    char entity_id[ENTITY_ID_MAX_LEN];
+    if (send && getButtonEntityId(lastAdjustedX, lastAdjustedY, entity_id, sizeof(entity_id))) {
+        SERIAL_PRINTF("Sending final brightness or volume update for entity at (%d, %d)\n",
+                      lastAdjustedX, lastAdjustedY);
+        sendLevelUpdate(entity_id, currentAdjustmentBrightness);
     }
 
     lastAdjustedX = -1;
@@ -230,81 +224,76 @@ bool adjustBrightnessOrVolume(int x, int y, bool increase) {
         return false;
     }
 
-    for (int i = 0; i < NUM_MAPPINGS; i++) {
-        if (entityMappings[i].x != x || entityMappings[i].y != y) {
-            continue;
-        }
-
-        const char* entity_id = entityMappings[i].entity_id;
-
-        if (!isAdjustableEntity(x, y)) {
-            SERIAL_PRINTLN("Entity has no level to adjust, skipping");
-            return false;
-        }
-
-        // A bounded wait: the LED refresh on the websocket task holds this
-        // briefly, and dropping one step of the ramp is better than stalling
-        // the whole button task on it.
-        if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(MUTEX_WAIT_MS)) != pdTRUE) {
-            SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightnessOrVolume");
-            return isBrightnessAdjustmentMode;
-        }
-
-        if (!isBrightnessAdjustmentMode) {
-            SERIAL_PRINTF("Entering adjustment mode for entity at (%d, %d)\n", x, y);
-            isBrightnessAdjustmentMode = true;
-            // Hold off Home Assistant state echoes so they don't fight the
-            // value being dialled in, or repaint over the level bar.
-            isBrightnessUpdateInProgress = true;
-            if (isMediaPlayer(entity_id)) {
-                currentAdjustmentBrightness = (int)(entityStates[y][x].volume * 255.0f);
-            } else if (isCover(entity_id)) {
-                currentAdjustmentBrightness = (entityStates[y][x].position * 255) / 100;
-            } else {
-                currentAdjustmentBrightness = entityStates[y][x].brightness;
-            }
-            brightnessAdjustmentStartTime = millis();
-            lastAdjustedX = x;
-            lastAdjustedY = y;
-            lastAdjustmentTime = 0; // take the first step immediately
-        } else if (x != lastAdjustedX || y != lastAdjustedY) {
-            // Another button was pressed mid-gesture; stay locked on the first.
-            xSemaphoreGive(xMutex);
-            return false;
-        }
-
-        unsigned long currentTime = millis();
-
-        if (currentTime - lastAdjustmentTime >= BRIGHTNESS_ADJUST_INTERVAL_MS) {
-            if (increase) {
-                currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_ADJUST_STEP);
-            } else {
-                currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_ADJUST_STEP);
-            }
-            SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
-
-            if (isMediaPlayer(entity_id)) {
-                entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
-            } else if (isCover(entity_id)) {
-                entityStates[y][x].position = (uint8_t)((currentAdjustmentBrightness * 100 + 127) / 255);
-                entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
-            } else {
-                entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
-            }
-
-            displayBrightnessLevel(currentAdjustmentBrightness,
-                                   entityStates[y][x].r,
-                                   entityStates[y][x].g,
-                                   entityStates[y][x].b);
-
-            lastAdjustmentTime = currentTime;
-        }
-
-        xSemaphoreGive(xMutex);
-        return true;
+    char entity_id[ENTITY_ID_MAX_LEN];
+    if (!getButtonEntityId(x, y, entity_id, sizeof(entity_id))) {
+        return false;
     }
 
-    return false;
+    if (!isAdjustableEntity(x, y)) {
+        SERIAL_PRINTLN("Entity has no level to adjust, skipping");
+        return false;
+    }
+
+    // A bounded wait: the LED refresh on the websocket task holds this
+    // briefly, and dropping one step of the ramp is better than stalling
+    // the whole button task on it.
+    if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(MUTEX_WAIT_MS)) != pdTRUE) {
+        SERIAL_PRINTLN("Failed to acquire mutex in adjustBrightnessOrVolume");
+        return isBrightnessAdjustmentMode;
+    }
+
+    if (!isBrightnessAdjustmentMode) {
+        SERIAL_PRINTF("Entering adjustment mode for entity at (%d, %d)\n", x, y);
+        isBrightnessAdjustmentMode = true;
+        // Hold off Home Assistant state echoes so they don't fight the
+        // value being dialled in, or repaint over the level bar.
+        isBrightnessUpdateInProgress = true;
+        if (isMediaPlayer(entity_id)) {
+            currentAdjustmentBrightness = (int)(entityStates[y][x].volume * 255.0f);
+        } else if (isCover(entity_id)) {
+            currentAdjustmentBrightness = (entityStates[y][x].position * 255) / 100;
+        } else {
+            currentAdjustmentBrightness = entityStates[y][x].brightness;
+        }
+        brightnessAdjustmentStartTime = millis();
+        lastAdjustedX = x;
+        lastAdjustedY = y;
+        lastAdjustmentTime = 0; // take the first step immediately
+    } else if (x != lastAdjustedX || y != lastAdjustedY) {
+        // Another button was pressed mid-gesture; stay locked on the first.
+        xSemaphoreGive(xMutex);
+        return false;
+    }
+
+    unsigned long currentTime = millis();
+
+    if (currentTime - lastAdjustmentTime >= BRIGHTNESS_ADJUST_INTERVAL_MS) {
+        if (increase) {
+            currentAdjustmentBrightness = min(255, currentAdjustmentBrightness + BRIGHTNESS_ADJUST_STEP);
+        } else {
+            currentAdjustmentBrightness = max(0, currentAdjustmentBrightness - BRIGHTNESS_ADJUST_STEP);
+        }
+        SERIAL_PRINTF("Adjusted value to %d\n", currentAdjustmentBrightness);
+
+        if (isMediaPlayer(entity_id)) {
+            entityStates[y][x].volume = currentAdjustmentBrightness / 255.0f;
+        } else if (isCover(entity_id)) {
+            entityStates[y][x].position = (uint8_t)((currentAdjustmentBrightness * 100 + 127) / 255);
+            entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
+        } else {
+            entityStates[y][x].brightness = (uint8_t)currentAdjustmentBrightness;
+        }
+
+        displayBrightnessLevel(currentAdjustmentBrightness,
+                               entityStates[y][x].r,
+                               entityStates[y][x].g,
+                               entityStates[y][x].b);
+
+        lastAdjustmentTime = currentTime;
+    }
+
+    xSemaphoreGive(xMutex);
+    return true;
 }
 
 void toggleChildLock() {

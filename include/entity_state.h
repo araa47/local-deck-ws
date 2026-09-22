@@ -5,6 +5,7 @@
 #include "config.h"
 #include "constants.h"
 #include "led_control.h"
+#include "button_config.h"
 
 struct EntityState {       
     bool is_on;
@@ -31,10 +32,36 @@ inline bool isCover(const char* entity_id) {
     return strncmp(entity_id, "cover.", 6) == 0;
 }
 
+// Domains added alongside the web UI, kept here for the same reason as
+// isCover(). All of them are driven with homeassistant.toggle, like isSwitch().
+inline bool isGenericToggle(const char* entity_id) {
+    return strncmp(entity_id, "input_boolean.", 14) == 0 ||
+           strncmp(entity_id, "fan.", 4) == 0 ||
+           strncmp(entity_id, "automation.", 11) == 0;
+}
+
+inline bool isScene(const char* entity_id) {
+    return strncmp(entity_id, "scene.", 6) == 0;
+}
+
+// button.* and input_button.* have no on/off state; a press presses them.
+inline bool isPressable(const char* entity_id) {
+    return strncmp(entity_id, "button.", 7) == 0 ||
+           strncmp(entity_id, "input_button.", 13) == 0;
+}
+
+// Can a button do something with this entity? Also what the web UI's entity
+// list is filtered down to.
+inline bool isSupportedEntity(const char* entity_id) {
+    return isLight(entity_id) || isSwitch(entity_id) || isMediaPlayer(entity_id) ||
+           isCover(entity_id) || isGenericToggle(entity_id) || isScene(entity_id) ||
+           isPressable(entity_id);
+}
+
 extern EntityState entityStates[ROWS][COLS];
 
 void initializeEntityStates();
+void resetEntityState(int x, int y);
 void refreshAllLEDs();
-const char* entityIdAt(int x, int y);
 
 #endif // ENTITY_STATE_H

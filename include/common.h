@@ -7,6 +7,11 @@
 #define ENABLE_SERIAL_LOGGING false
 #endif
 
+// Network name: the web UI is at http://DEVICE_HOSTNAME.local/
+#ifndef DEVICE_HOSTNAME
+#define DEVICE_HOSTNAME "localdeck"
+#endif
+
 #define SERIAL_PRINT(x) if (ENABLE_SERIAL_LOGGING) Serial.print(x)
 #define SERIAL_PRINTLN(x) if (ENABLE_SERIAL_LOGGING) Serial.println(x)
 #define SERIAL_PRINTF(format, ...) if (ENABLE_SERIAL_LOGGING) Serial.printf(format, __VA_ARGS__)

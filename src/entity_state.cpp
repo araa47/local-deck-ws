@@ -6,29 +6,29 @@ EntityState entityStates[ROWS][COLS];
 void initializeEntityStates() {
     for (int y = 0; y < ROWS; y++) {
         for (int x = 0; x < COLS; x++) {
-            entityStates[y][x] = {false, 255, 255, 255, 255, x, y};
+            resetEntityState(x, y);
         }
-    }
-    
-    // Set registered entities
-    for (int i = 0; i < NUM_MAPPINGS; i++) {
-        int x = entityMappings[i].x;
-        int y = entityMappings[i].y;
-        entityStates[y][x].is_on = false;
-        entityStates[y][x].r = entityMappings[i].default_r;
-        entityStates[y][x].g = entityMappings[i].default_g;
-        entityStates[y][x].b = entityMappings[i].default_b;
-        entityStates[y][x].brightness = entityMappings[i].default_brightness;
     }
 }
 
-const char* entityIdAt(int x, int y) {
-    for (int i = 0; i < NUM_MAPPINGS; i++) {
-        if (entityMappings[i].x == x && entityMappings[i].y == y) {
-            return entityMappings[i].entity_id;
+// Forget what is known about a button's entity and go back to its configured
+// defaults, until Home Assistant reports the real state.
+void resetEntityState(int x, int y) {
+    ButtonConfig cfg;
+    bool assigned = getButtonConfig(x, y, cfg);
+
+    // Taken after the config copy, never around it: see button_config.cpp.
+    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+        EntityState& state = entityStates[y][x];
+        state = {false, 255, 255, 255, 255, x, y};
+        if (assigned) {
+            state.r = cfg.r;
+            state.g = cfg.g;
+            state.b = cfg.b;
+            state.brightness = cfg.brightness;
         }
+        xSemaphoreGive(xMutex);
     }
-    return NULL;
 }
 
 // Repaint the whole grid from the current state. This replaces the old
