@@ -89,6 +89,7 @@ void queueWebSocketMessage(uint8_t* payload, size_t length) {
 
 void processQueuedMessages() {
     int processedCount = 0;
+    int remaining = 0;
     unsigned long startTime = millis();
 
     while (processedCount < MAX_MESSAGES_PER_DRAIN &&
@@ -112,6 +113,10 @@ void processQueuedMessages() {
             queuedMessageCount = queuedMessageCount - 1;
         }
 
+        // Snapshot under the lock; reading it after the release would report a
+        // count that a concurrent enqueue has already moved on from.
+        remaining = queuedMessageCount;
+
         xSemaphoreGive(queueMutex);
 
         if (!payload) {
@@ -124,6 +129,6 @@ void processQueuedMessages() {
     }
 
     if (processedCount > 0) {
-        SERIAL_PRINTF("Processed %d queued messages. Remaining: %d\n", processedCount, queuedMessageCount);
+        SERIAL_PRINTF("Processed %d queued messages. Remaining: %d\n", processedCount, remaining);
     }
 }
