@@ -25,6 +25,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     switch(type) {
         case WStype_DISCONNECTED:
             SERIAL_PRINTLN("WebSocket disconnected");
+            onHomeAssistantDisconnected();
             showWebSocketConnectionFailedAnimation();
             break;
         case WStype_CONNECTED:

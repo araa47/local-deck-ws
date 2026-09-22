@@ -58,6 +58,14 @@ struct EntityMapping {
     uint8_t default_brightness;
 };
 
+// This is the layout a freshly flashed deck starts with. Once you change the
+// buttons from the web UI (http://localdeck.local/), the deck keeps that layout
+// instead, across reboots and reflashes, until you hit "Reset to config.h".
+// The web UI can also export its layout in this format.
+//
+// Leave the web UI out of the build entirely with:
+// #define ENABLE_WEB_UI false
+
 // default colors and brightness are ignored if the light has different colors/brightness 
 // default colors and brightness are useful for other entities (media_player,scripts,switch)
 

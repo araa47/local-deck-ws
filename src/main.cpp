@@ -12,6 +12,8 @@
 #include "entity_state.h"
 #include "wifi_manager.h"
 #include "utils.h"
+#include "button_config.h"
+#include "web_ui.h"
 
 // Global variables
 unsigned long messageId = 1;
@@ -61,6 +63,9 @@ void setup() {
         return;
     }
 
+    // Before anything that reads the layout: the button task, the websocket.
+    initButtonConfig();
+
     showConnectingAnimation();
 
     if (connectToWiFi(10000)) {
@@ -68,10 +73,14 @@ void setup() {
         showWiFiConnectedAnimation();
         initializeWebSocket();
         initializeEntityStates();
+        onWebUIWiFiConnected();
     } else {
         SERIAL_PRINTLN("\nFailed to connect to WiFi");
         showConnectionFailedAnimation();
     }
+
+    // Listens whether or not Wi-Fi came up; it starts answering once it does.
+    initWebUI();
 
     xTaskCreate(
         buttonCheckTask,
@@ -111,6 +120,7 @@ void loop() {
     }
 
     webSocket.loop();
+    handleWebUI();
 
     // buttonCheckTask owns this flag and clears it when a gesture finishes.
     // This is only a backstop in case it somehow never does.
@@ -135,6 +145,7 @@ void loop() {
     if (WiFi.status() != WL_CONNECTED) {
         if (connectToWiFi(10000)) {
             reconnectWebSocket();
+            onWebUIWiFiConnected();
         }
     }
 

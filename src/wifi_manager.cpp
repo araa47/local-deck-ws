@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 
 bool connectToWiFi(unsigned long timeout) {
+    WiFi.setHostname(DEVICE_HOSTNAME);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     unsigned long startAttemptTime = millis();
 
