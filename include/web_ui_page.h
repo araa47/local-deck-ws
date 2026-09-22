@@ -223,7 +223,8 @@ const ACTIONS = {
   light: "Tap toggles it. Hold ▲/▼ and this button to dim. Shows the light's own colour once it reports one.",
   media_player: "Tap plays / pauses. Hold ▲/▼ and this button to change volume.",
   cover: "Tap opens / closes. Hold ▲/▼ and this button to set position, if the cover supports it.",
-  switch: "Tap toggles it.", input_boolean: "Tap toggles it.", fan: "Tap toggles it.",
+  fan: "Tap turns it on / off. Hold ▲/▼ and this button to change speed, if the fan supports it.",
+  switch: "Tap toggles it.", input_boolean: "Tap toggles it.",
   automation: "Tap enables / disables the automation.", script: "Tap runs the script (lit while it runs).",
   scene: "Tap activates the scene.", button: "Tap presses it.", input_button: "Tap presses it."
 };

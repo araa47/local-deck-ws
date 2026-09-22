@@ -14,10 +14,12 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 - Support for calling media_player.media_play_pause service for `media_player` entities
 - Support for toggling `input_boolean`, `fan` and `automation` entities, activating `scene`s, and pressing `button`/`input_button` entities
 - State and brightness tracking for lights
-- Brightness/Volume/Position control with special up and down buttons (lights / media_player / covers)
-    - press this with any light/media player/cover to set the brightness/volume/position, keep pressed to increase/decrease
+- Brightness/Volume/Position/Speed control with special up and down buttons (lights / media_player / covers / fans)
+    - press this with any light/media player/cover/fan to set the brightness/volume/position/speed, keep pressed to increase/decrease
     - covers are only offered this if Home Assistant reports they support `set_cover_position`; one that
       only opens, closes and stops (many awnings) keeps plain toggle behaviour
+    - fans likewise, if Home Assistant reports they support `set_percentage` (a fan that is only on or off keeps plain
+      toggle behaviour). The key's LED shows the fan's speed; Home Assistant rounds to the fan's own speed steps
 ![Brightness Control](images/brightness.gif)
 - Child Lock Mode (Holding 0,0 + 5,0 for 1 seconds enables child lock mode (Purple LEDs), same actions for disabling (White LEDs)
     - Both buttons + time for child lock mode can be configured in config.h

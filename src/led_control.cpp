@@ -28,20 +28,24 @@ void updateLED(int x, int y, const JsonObject& state) {
                 currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
                 char entity_id[ENTITY_ID_MAX_LEN];
-                bool cover = getButtonEntityId(x, y, entity_id, sizeof(entity_id)) &&
-                             isCover(entity_id);
+                bool assigned = getButtonEntityId(x, y, entity_id, sizeof(entity_id));
+                bool cover = assigned && isCover(entity_id);
+                bool fan = assigned && isFan(entity_id);
+                const char* levelAttribute = cover ? "current_position" : "percentage";
+                bool levelReported = (cover || fan) && !attributes[levelAttribute].isNull();
 
-                // Covers: track position and capability whether open or closed,
-                // so a ramp can start from where the cover actually is. Only read
-                // supported_features for covers -- the same attribute means
-                // something entirely different on a light or media player.
-                if (cover) {
+                // Covers and fans: track the level and whether it can be set,
+                // whether on or off, so a ramp can start from where it actually
+                // is. Only read supported_features for these -- the bits mean
+                // something different in every domain.
+                if (cover || fan) {
                     if (!attributes["supported_features"].isNull()) {
                         int features = attributes["supported_features"];
-                        currentState.supports_position = (features & COVER_SET_POSITION) != 0;
+                        currentState.supports_level =
+                            (features & (cover ? COVER_SET_POSITION : FAN_SET_SPEED)) != 0;
                     }
-                    if (!attributes["current_position"].isNull()) {
-                        currentState.position = attributes["current_position"];
+                    if (levelReported) {
+                        currentState.level = attributes[levelAttribute];
                     }
                 }
 
@@ -57,9 +61,12 @@ void updateLED(int x, int y, const JsonObject& state) {
                     } else if (!attributes["volume_level"].isNull()) {
                         currentState.volume = attributes["volume_level"];
                         currentState.brightness = currentState.volume * 255;
-                    } else if (cover && !attributes["current_position"].isNull()) {
-                        // Show how far open the cover is, not just that it is open.
-                        currentState.brightness = (currentState.position * 255) / 100;
+                    } else if (levelReported || ((cover || fan) && currentState.supports_level)) {
+                        // Show how far open the cover is, or how fast the fan
+                        // runs, not just that it is on. A diff that changes some
+                        // other attribute (a fan's preset mode, say) leaves the
+                        // level out, so fall back to the last one reported.
+                        currentState.brightness = (currentState.level * 255) / 100;
                     } else {
                         currentState.brightness = 255; // Default to full brightness if not specified
                     }
