@@ -11,8 +11,10 @@ This repository contains alternative firmware for the [LocalDeck](https://www.my
 - Support for toggling `switch`,`light`,`cover` and `script` entities with a single press
 - Support for calling media_player.media_play_pause service for `media_player` entities
 - State and brightness tracking for lights
-- Brightness/Volume control with special up and down buttons (lights / media_player)
-    - press this with any light/media player to set the brightness/volume, keep pressed to increase/decrease
+- Brightness/Volume/Position control with special up and down buttons (lights / media_player / covers)
+    - press this with any light/media player/cover to set the brightness/volume/position, keep pressed to increase/decrease
+    - covers are only offered this if Home Assistant reports they support `set_cover_position`; one that
+      only opens, closes and stops (many awnings) keeps plain toggle behaviour
 ![Brightness Control](images/brightness.gif)
 - Child Lock Mode (Holding 0,0 + 5,0 for 1 seconds enables child lock mode (Purple LEDs), same actions for disabling (White LEDs)
     - Both buttons + time for child lock mode can be configured in config.h

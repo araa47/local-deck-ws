@@ -27,6 +27,23 @@ void updateLED(int x, int y, const JsonObject& state) {
                 // If attributes are null, this might be a switch or media player. Update only the on/off state.
                 currentState.brightness = currentState.is_on ? 255 : 0;
             } else {
+                const char* entity_id = entityIdAt(x, y);
+                bool cover = entity_id && isCover(entity_id);
+
+                // Covers: track position and capability whether open or closed,
+                // so a ramp can start from where the cover actually is. Only read
+                // supported_features for covers -- the same attribute means
+                // something entirely different on a light or media player.
+                if (cover) {
+                    if (!attributes["supported_features"].isNull()) {
+                        int features = attributes["supported_features"];
+                        currentState.supports_position = (features & COVER_SET_POSITION) != 0;
+                    }
+                    if (!attributes["current_position"].isNull()) {
+                        currentState.position = attributes["current_position"];
+                    }
+                }
+
                 if (currentState.is_on) {
                     if (!attributes["rgb_color"].isNull()) {
                         JsonArray rgb = attributes["rgb_color"];
@@ -39,6 +56,9 @@ void updateLED(int x, int y, const JsonObject& state) {
                     } else if (!attributes["volume_level"].isNull()) {
                         currentState.volume = attributes["volume_level"];
                         currentState.brightness = currentState.volume * 255;
+                    } else if (cover && !attributes["current_position"].isNull()) {
+                        // Show how far open the cover is, not just that it is open.
+                        currentState.brightness = (currentState.position * 255) / 100;
                     } else {
                         currentState.brightness = 255; // Default to full brightness if not specified
                     }

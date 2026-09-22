@@ -15,6 +15,6 @@ void handleHomeAssistantMessage(uint8_t* payload, size_t length);
 void updateTimeAndCheckNightMode(const char* time_str);
 void toggleEntity(int x, int y);
 void subscribeToEntities();
-void sendBrightnessOrVolumeUpdate(const char* entity_id, int value, bool is_media_player);
+void sendLevelUpdate(const char* entity_id, int value);
 
 #endif // HOMEASSISTANT_HANDLER_H
