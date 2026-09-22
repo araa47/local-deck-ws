@@ -23,23 +23,19 @@
 #define DOWN_BUTTON_X 1
 #define DOWN_BUTTON_Y 0
 
-// Brightness / volume control.
-// Hold UP or DOWN, then hold an entity button to ramp it. The ramp moves
-// BRIGHTNESS_ADJUST_STEP counts (out of 255) every BRIGHTNESS_ADJUST_INTERVAL_MS,
-// so the defaults below sweep the full range in about a second. Both are
-// optional -- button_control.h defines the same defaults if you leave them out.
-#define BRIGHTNESS_ADJUST_STEP 8
-#define BRIGHTNESS_ADJUST_INTERVAL_MS 30
-
-// Settle time (microseconds) after a matrix column's pull-up is enabled and
-// before it is sampled. Raise this if presses are missed on long wiring.
-#define MATRIX_SETTLE_US 30
+// Brightness Control 
+#define BRIGHTNESS_STEP 10 // Smaller step for continuous adjustment
+const unsigned long BRIGHTNESS_ADJUST_INTERVAL = 100; // milliseconds
+#define BRIGHTNESS_ADJUST_TIMEOUT 2000 // 2 seconds
 
 // Constants for animations
 const int ANIMATION_DELAY_SHORT = 50;
 const int ANIMATION_DELAY_MEDIUM = 100;
 const int ANIMATION_REPEAT_COUNT = 3;
 const float ANIMATION_BRIGHTNESS_SCALAR = 0.03f; // Adjust this value to change overall brightness
+
+// JSON buffer size
+const size_t JSON_BUFFER_SIZE = 16384; // 16KB Anything less leads to esp to crash when first connecting to WS
 
 // Entity mapping structure
 struct EntityMapping {
