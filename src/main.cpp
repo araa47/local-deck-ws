@@ -37,6 +37,7 @@ int currentAdjustmentBrightness = 0;
 unsigned long brightnessAdjustmentStartTime = 0;
 int lastAdjustedX = -1;
 int lastAdjustedY = -1;
+TaskHandle_t buttonTaskHandle = NULL;
 
 void setup() {
     if (ENABLE_SERIAL_LOGGING) {
@@ -88,7 +89,7 @@ void setup() {
         4096,
         NULL,
         1,
-        NULL
+        &buttonTaskHandle
     );
 
 #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5

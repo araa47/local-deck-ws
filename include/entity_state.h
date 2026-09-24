@@ -65,6 +65,12 @@ inline bool isPressable(const char* entity_id) {
            strncmp(entity_id, "input_button.", 13) == 0;
 }
 
+// The same domains as isSupportedEntity(), as a Jinja list: the web UI's
+// entity list has Home Assistant filter by it. Keep the two in step.
+#define SUPPORTED_DOMAINS_JINJA \
+    "['light','switch','script','cover','media_player','input_boolean'," \
+    "'fan','automation','scene','button','input_button']"
+
 // Can a button do something with this entity? Also what the web UI's entity
 // list is filtered down to.
 inline bool isSupportedEntity(const char* entity_id) {

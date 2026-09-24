@@ -18,6 +18,8 @@ void subscribeToEntities();
 // Swap the entity subscription for one matching the current button layout.
 void resubscribeToEntities();
 bool isHomeAssistantConnected();
+// Times the Home Assistant websocket has dropped since boot.
+unsigned long homeAssistantDisconnectCount();
 void onHomeAssistantDisconnected();
 void sendLevelUpdate(const char* entity_id, int value);
 

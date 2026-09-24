@@ -104,6 +104,10 @@ shown in your router) in a browser on the same network.
   one. On a phone, tap a key and then tap an entity.
 - Tap a key to change its colour and brightness (used for switches, scripts, media players, and lights until they
   report their own colour), to type an entity id by hand, or to **Press** it and check it does what you expect.
+- Switch to **Test** (top right of the grid) and clicking a key taps it, exactly like tapping it on the deck. Handy for
+  checking a whole layout. The ▲/▼ gestures still need the real keys.
+- The line under the grid shows how long the deck has been up and why it last restarted (a crash or watchdog reset is
+  highlighted), which helps when reporting problems.
 - Every change is live immediately and saved on the deck, so it survives reboots and reflashes.
 - **Export as config.h** gives you the layout as an `entityMappings` block to paste into `config.h`.
   **Reset to config.h** throws away the saved layout and goes back to what `config.h` says.
@@ -120,8 +124,11 @@ The web UI has no password by default, so anyone on your network can remap the b
 To change the network name, build with `-DDEVICE_HOSTNAME=\"otherdeck\"`. To leave the web UI out entirely, add
 `#define ENABLE_WEB_UI false` to `config.h`.
 
-The entity list is read from Home Assistant's REST API (`/api/states`) using the token in `secrets.h`; the token itself
-never reaches the browser.
+The entity list comes from Home Assistant's REST API, using the token in `secrets.h`; the token itself never reaches
+the browser. With an admin token (the usual kind) Home Assistant filters the list itself through a template, a few
+hundred entities at a time, which takes a couple of seconds even on a big install. A non-admin token can't render
+templates, so the deck falls back to reading every entity's state itself, which is much slower on a big install.
+Entity ids longer than 95 characters are left out, since a button can't hold them.
 
 ### Controlling Devices
 

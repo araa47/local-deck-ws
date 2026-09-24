@@ -4,6 +4,7 @@
 // subscription with it, and it is what unsubscribe_events needs.
 static unsigned long entitySubscriptionId = 0;
 static bool haAuthenticated = false;
+static unsigned long haDisconnects = 0;
 
 // A single entity can sit on more than one button, so update all of them.
 static void updateButtonsForEntity(const char* entity_id, const JsonObject& state) {
@@ -22,9 +23,16 @@ bool isHomeAssistantConnected() {
     return haAuthenticated;
 }
 
+unsigned long homeAssistantDisconnectCount() {
+    return haDisconnects;
+}
+
 void onHomeAssistantDisconnected() {
     // The subscription dies with the connection; auth_ok on the next one
     // subscribes afresh.
+    if (haAuthenticated) {
+        haDisconnects++;
+    }
     haAuthenticated = false;
     entitySubscriptionId = 0;
 }
